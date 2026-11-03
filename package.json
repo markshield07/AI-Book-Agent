@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -n web,worker \"next dev -p 3100\" \"tsx src/worker/index.ts\"",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "concurrently -n web,worker \"next start -p 3100\" \"tsx src/worker/index.ts\"",
     "worker": "tsx src/worker/index.ts",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "tsx tests/e2e/full-workflow.ts"
+    "test:e2e": "tsx tests/e2e/full-workflow.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",
