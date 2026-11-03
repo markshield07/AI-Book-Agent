@@ -15,38 +15,16 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String
-  passwordHash String
+  // Unused in single-author mode; kept so accounts can be re-enabled.
+  passwordHash String   @default("")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   // Author must opt in before manuscript text is sent to an external AI provider.
   aiConsentAt  DateTime?
 
-  sessions    Session[]
-  resetTokens PasswordResetToken[]
   projects    Project[]
   decisions   Decision[]
   auditEvents AuditEvent[]
-}
-
-model Session {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-}
-
-model PasswordResetToken {
-  id        String    @id @default(cuid())
-  tokenHash String    @unique
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
 }
 
 enum ProjectStatus {

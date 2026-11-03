@@ -14,10 +14,28 @@ import { ANALYSIS_SYSTEM, analysisUserPrompt, editSystemPrompt, editUserPrompt }
 
 type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
-function jsonSchema(schema: z.ZodType): Record<string, unknown> {
-  const s = z.toJSONSchema(schema, { target: "draft-7" }) as Record<string, unknown>;
-  delete s.$schema;
-  return s;
+// Structured outputs accept a subset of JSON Schema: every object closed, every
+// property required, no numeric/length constraints (those are checked by zod afterwards).
+const UNSUPPORTED = ["$schema", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "minItems", "maxItems", "pattern", "format"];
+function clean(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(clean);
+  if (!node || typeof node !== "object") return node;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(node)) {
+    if (UNSUPPORTED.includes(k)) continue;
+    // keys inside "properties" are field names, not keywords
+    out[k] = k === "properties" && v && typeof v === "object"
+      ? Object.fromEntries(Object.entries(v).map(([pk, pv]) => [pk, clean(pv)]))
+      : clean(v);
+  }
+  if (out.type === "object" && out.properties) {
+    out.additionalProperties = false;
+    out.required = Object.keys(out.properties as object);
+  }
+  return out;
+}
+export function jsonSchema(schema: z.ZodType): Record<string, unknown> {
+  return clean(z.toJSONSchema(schema, { target: "draft-7" })) as Record<string, unknown>;
 }
 
 export class AnthropicEditor implements EditorProvider {
