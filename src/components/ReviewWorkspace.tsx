@@ -232,7 +232,7 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
                     {notes.length > 0 && (
                       <button className="absolute -left-6 top-1 text-xs" title={`${notes.length} editorial note${notes.length > 1 ? "s" : ""}`} onClick={() => select(notes[0].id)} aria-label="Show editorial note">💬</button>
                     )}
-                    <p className={`${cls} ${notes.some((n) => n.status === "PENDING") ? "note-mark" : ""}`}>
+                    <p className={`${cls} whitespace-pre-line ${notes.some((n) => n.status === "PENDING") ? "note-mark" : ""}`}>
                       <ParagraphView text={p.text} marks={p.marks} edits={edits} view={view} visibleIds={new Set(visible.map((v) => v.id))} selected={selected} onSelect={select} />
                     </p>
                   </div>

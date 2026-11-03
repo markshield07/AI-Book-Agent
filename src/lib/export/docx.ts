@@ -28,7 +28,10 @@ export interface DocxMeta {
 const INCH = 1440;
 
 function runs(text: string, marks: SnapshotChapter["paragraphs"][number]["marks"]) {
-  return toRuns(text, marks).map((r) => new TextRun({ text: r.text, italics: r.italic, bold: r.bold }));
+  // A "\n" inside a paragraph is a line break (poems, letters), not a new paragraph.
+  return toRuns(text, marks).flatMap((r) =>
+    r.text.split("\n").map((t, i) => new TextRun({ text: t, italics: r.italic, bold: r.bold, ...(i > 0 ? { break: 1 } : {}) }))
+  );
 }
 
 export async function buildManuscriptDocx(chapters: SnapshotChapter[], meta: DocxMeta): Promise<Buffer> {
@@ -163,7 +166,7 @@ export async function verifyDocx(buf: Buffer, chapters: SnapshotChapter[]): Prom
     return [{ name: "File opens as a Word document", result: "failed", detail: (e as Error).message }];
   }
   const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
-  const expected = chapters.flatMap((c) => [isUntitledFront(c) ? "" : c.title, ...c.paragraphs.map((p) => p.text.trim())]).filter(Boolean);
+  const expected = chapters.flatMap((c) => [isUntitledFront(c) ? "" : c.title, ...c.paragraphs.map((p) => p.text.replace(/\s*\n\s*/g, "").trim())] /* raw text drops line breaks inside a paragraph */).filter(Boolean);
   let li = 0;
   let missing = 0;
   for (const e of expected) {

@@ -1,9 +1,10 @@
-// Background worker: claims editing jobs from Postgres and runs them.
+// Background worker: claims editing jobs from the database and runs them.
 // Run alongside the web server (`npm run dev` starts both). Safe to run several copies.
 import { claimJob, runJob } from "../lib/editor/pipeline";
 import { db, enableWal } from "../lib/db";
 
 let stopping = false;
+let current: string | null = null;
 const POLL_MS = Number(process.env.WORKER_POLL_MS || 2000);
 
 async function loop() {
@@ -14,7 +15,9 @@ async function loop() {
       const id = await claimJob();
       if (id) {
         console.log(`[worker] running job ${id}`);
+        current = id;
         await runJob(id);
+        current = null;
         console.log(`[worker] finished job ${id}`);
         continue;
       }
@@ -28,10 +31,16 @@ async function loop() {
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
-    // The current job keeps its lock; if we exit mid-step another worker resumes it
-    // from the last chapter checkpoint once the lock goes stale.
+    // Release the current job's lock so the next start resumes it straight away from the
+    // last finished chapter, instead of waiting for the lock to go stale.
     stopping = true;
     setTimeout(() => process.exit(0), 5000).unref();
+    const id = current;
+    if (id)
+      db.job
+        .updateMany({ where: { id, status: "RUNNING" }, data: { lockedAt: new Date(0) } })
+        .catch(() => {})
+        .finally(() => process.exit(0));
   });
 }
 

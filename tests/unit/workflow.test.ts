@@ -182,6 +182,30 @@ describe("end-to-end editing workflow", () => {
     expect((await db.job.findUniqueOrThrow({ where: { id: j2.id } })).status).toBe("SUCCEEDED");
   });
 
+  it("never skips a chapter whose earlier runs were interrupted", async () => {
+    const job = await enqueueEditJob(userId, projectId, { mode: "PROOFREAD", intensity: "LIGHT" });
+    // As if the app was closed mid-chapter three times: the step's stored attempts hit the limit.
+    await db.jobStep.updateMany({ where: { jobId: job.id, kind: "chapter" }, data: { attempts: 3 } });
+    await db.job.update({ where: { id: job.id }, data: { status: "RUNNING", lockedAt: new Date(0) } });
+    await drainJobs(); // a released lock is picked up straight away
+    const done = await db.job.findUniqueOrThrow({ where: { id: job.id }, include: { steps: true } });
+    expect(done.status).toBe("SUCCEEDED");
+    expect(done.steps.every((s) => s.status === "SUCCEEDED")).toBe(true);
+    expect(done.doneSteps).toBe(done.steps.length);
+  });
+
+  it("re-uploading the same book with repeated chapter names changes nothing", async () => {
+    const u = await makeUser("parts");
+    const p = await db.project.create({ data: { userId: u.id, title: "Parts", authorName: "A", targetFormats: [], styleSheet: {} } });
+    const { messyDocx } = await import("../samples/messy-docx");
+    const file = { name: "messy.docx", type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", data: await messyDocx() };
+    await ingest(u.id, p.id, file);
+    const again = await ingest(u.id, p.id, file);
+    expect(again.report.added).toHaveLength(0);
+    expect(again.report.pending).toHaveLength(0);
+    expect(again.report.unchanged.filter((t) => t === "Chapter 1")).toHaveLength(2);
+  });
+
   it("keeps each author's projects private", async () => {
     const other = await makeUser("other");
     await expect(getOwnedProject(projectId, other.id)).rejects.toThrow(NotFoundError);

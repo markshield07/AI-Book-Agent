@@ -10,7 +10,8 @@ import { validateSuggestions, type ParagraphRef } from "./validate";
 import { audit } from "../audit";
 
 const CHUNK_WORDS = Number(process.env.EDIT_CHUNK_WORDS || 2500);
-const ANALYSIS_WORD_BUDGET = Number(process.env.ANALYSIS_WORD_BUDGET || 150_000);
+// About 120k tokens: fits the model with room for the prompt and reply.
+const ANALYSIS_WORD_BUDGET = Number(process.env.ANALYSIS_WORD_BUDGET || 90_000);
 const MAX_ATTEMPTS = 3;
 
 export async function enqueueEditJob(
@@ -68,7 +69,8 @@ export async function resumeJob(projectId: string, jobId: string) {
  * update on the row's previous status/lock, so two workers can never take the same job.
  */
 export async function claimJob(): Promise<string | null> {
-  const stale = new Date(Date.now() - 10 * 60_000);
+  // The heartbeat refreshes lockedAt every 30 s, so 3 minutes without one means the worker is gone.
+  const stale = new Date(Date.now() - 3 * 60_000);
   const candidates = await db.job.findMany({
     where: { OR: [{ status: "QUEUED" }, { status: "RUNNING", lockedAt: { lt: stale } }] },
     orderBy: { createdAt: "asc" },
@@ -102,8 +104,11 @@ export async function runJob(jobId: string): Promise<void> {
       await db.job.update({ where: { id: jobId }, data: { stage: step.kind === "analysis" ? "analysis" : "editing" } });
       await db.project.update({ where: { id: job.projectId }, data: { status: step.kind === "analysis" ? "ANALYZING" : "EDITING" } });
       let lastError: unknown = null;
-      for (let attempt = step.attempts; attempt < MAX_ATTEMPTS; attempt++) {
-        await db.jobStep.update({ where: { id: step.id }, data: { status: "RUNNING", attempts: attempt + 1 } });
+      let succeeded = false;
+      // Attempts are counted per run: a step interrupted by closing the app must not use up its
+      // retries (and must never be skipped because its stored count already reached the limit).
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        await db.jobStep.update({ where: { id: step.id }, data: { status: "RUNNING", attempts: { increment: 1 } } });
         try {
           const usage =
             step.kind === "analysis"
@@ -118,6 +123,7 @@ export async function runJob(jobId: string): Promise<void> {
             data: { doneSteps: { increment: 1 }, inputTokens: { increment: usage.inputTokens }, outputTokens: { increment: usage.outputTokens } },
           });
           lastError = null;
+          succeeded = true;
           break;
         } catch (err) {
           if (err instanceof Cancelled) throw err;
@@ -128,9 +134,9 @@ export async function runJob(jobId: string): Promise<void> {
           if (attempt + 1 < MAX_ATTEMPTS) await sleep(2000 * 2 ** attempt);
         }
       }
-      if (lastError) {
+      if (!succeeded) {
         await db.jobStep.update({ where: { id: step.id }, data: { status: "FAILED" } });
-        throw lastError;
+        throw lastError ?? new Error("A chapter could not be edited.");
       }
     }
     await db.job.update({ where: { id: jobId }, data: { status: "SUCCEEDED", stage: "done", finishedAt: new Date() } });

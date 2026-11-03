@@ -2,6 +2,7 @@
 // Unsupported formats are refused with an explanation rather than half-imported.
 
 import mammoth from "mammoth";
+import JSZip from "jszip";
 import { parse, HTMLElement, Node, NodeType } from "node-html-parser";
 import {
   DocChapter,
@@ -95,11 +96,18 @@ export async function importDocx(data: Buffer): Promise<ImportResult> {
   }
   const root = parse(html);
   const blocks: RawBlock[] = [];
+  let notes = 0;
   const walk = (el: HTMLElement, inQuote: boolean) => {
     for (const child of el.childNodes) {
       if (child.nodeType !== NodeType.ELEMENT_NODE) continue;
       const c = child as HTMLElement;
       const tag = c.tagName?.toLowerCase();
+      // Footnotes/endnotes: mammoth lists them at the end of the document. Keep them out of the
+      // last chapter's text (their markers are removed in inlineText).
+      if (tag === "li" && /^(footnote|endnote)-\d+$/.test(c.getAttribute("id") ?? "")) {
+        notes++;
+        continue;
+      }
       if (tag === "blockquote") walk(c, true);
       else if (tag === "ul" || tag === "ol" || tag === "table" || tag === "tbody" || tag === "tr" || tag === "td") walk(c, inQuote);
       else if (/^h[1-6]$/.test(tag)) {
@@ -119,10 +127,35 @@ export async function importDocx(data: Buffer): Promise<ImportResult> {
       level: "warning",
       message: `Your document contains ${images} image${images > 1 ? "s" : ""}. Images aren't carried into the edited manuscript yet; the text around them was imported.`,
     });
+  if (notes > 0)
+    warnings.push({
+      level: "warning",
+      message: `Your document has ${notes} footnote${notes > 1 ? "s" : ""} or endnote${notes > 1 ? "s" : ""}. Notes aren't carried into the edited manuscript yet, so they were left out and their markers removed. Keep your original file for the notes.`,
+    });
+  const review = await wordReviewMarks(data);
+  if (review.tracked)
+    warnings.push({
+      level: "warning",
+      message: "Your document still has tracked changes. They were imported as if you had accepted all of them. If that isn't what you want, accept or reject them in Word and upload again.",
+    });
+  if (review.comments)
+    warnings.push({ level: "info", message: "Comments in your Word file weren't imported; only the text was." });
   const unknownStyles = messages.filter((m) => m.includes("Unrecognised paragraph style")).length;
   if (unknownStyles > 0)
     warnings.push({ level: "info", message: "Some custom Word styles were treated as normal paragraphs." });
   return buildResult(blocks, warnings, images);
+}
+
+/** Does the .docx still contain tracked changes or comments? (Read from the zip's XML.) */
+async function wordReviewMarks(data: Buffer): Promise<{ tracked: boolean; comments: boolean }> {
+  try {
+    const zip = await JSZip.loadAsync(data);
+    const xml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+    const comments = (await zip.file("word/comments.xml")?.async("string")) ?? "";
+    return { tracked: /<w:(ins|del|moveFrom|moveTo)\b/.test(xml), comments: /<w:comment\b/.test(comments) };
+  } catch {
+    return { tracked: false, comments: false };
+  }
 }
 
 function inlineText(el: HTMLElement): { text: string; marks: Mark[] } {
@@ -142,9 +175,11 @@ function inlineText(el: HTMLElement): { text: string; marks: Mark[] } {
     const e = node as HTMLElement;
     const tag = e.tagName?.toLowerCase();
     if (tag === "br") {
-      text += " ";
+      text += "\n"; // a line break inside a paragraph (poems, letters, addresses) is kept
       return;
     }
+    // Footnote/endnote reference markers like [1].
+    if (tag === "a" && /^#(footnote|endnote)-\d+$/.test(e.getAttribute("href") ?? "")) return;
     const it = italic || tag === "em" || tag === "i";
     const bd = bold || tag === "strong" || tag === "b";
     for (const c of e.childNodes) visit(c, it, bd);
@@ -243,16 +278,33 @@ export const isUntitledFront = (c: { title: string; kind: string }) => c.kind ==
 const NUMBER_WORDS =
   "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty";
 const CHAPTER_RE = new RegExp(
-  `^(chapter|ch\\.)\\s+([0-9]+|[ivxlcdm]+|(?:${NUMBER_WORDS})(?:[- ](?:${NUMBER_WORDS}))?)\\b.{0,80}$`,
+  `^(chapter|ch\\.)\\s+([0-9]+|(?=[mdclxvi])m{0,3}(?:c[md]|d?c{0,3})(?:x[cl]|l?x{0,3})(?:i[xv]|v?i{0,3})|(?:${NUMBER_WORDS})(?:[- ](?:${NUMBER_WORDS}))?)\\b.{0,80}$`,
   "i"
 );
-const SPECIAL_RE = /^(prologue|epilogue|interlude|part\s+([0-9]+|[ivxlcdm]+|[a-z]+))\b.{0,60}$/i;
+const ROMAN = "(?=[mdclxvi])m{0,3}(?:c[md]|d?c{0,3})(?:x[cl]|l?x{0,3})(?:i[xv]|v?i{0,3})";
+const SPECIAL_RE = new RegExp(`^(prologue|epilogue|interlude|(?:part|book)\\s+(?:[0-9]+|${ROMAN}|(?:${NUMBER_WORDS})(?:[- ](?:${NUMBER_WORDS}))?))\\b.{0,60}$`, "i");
+const PART_RE = new RegExp(`^(?:part|book)\\s+(?:[0-9]+|${ROMAN}|(?:${NUMBER_WORDS}))\\b`, "i");
 const FRONT_RE = /^(foreword|preface|introduction|dedication|epigraph|copyright|author'?s note|note to the reader)\b.{0,40}$/i;
 const BACK_RE = /^(acknowledg(e)?ments|about the author|afterword|also by|other books by|glossary|appendix)\b.{0,40}$/i;
 const SCENE_BREAK_RE = /^\s*(?:[*#~•·◆◇❖§+=_\-]\s*){1,7}$/;
 
 export function isSceneBreak(text: string): boolean {
   return SCENE_BREAK_RE.test(text) && text.trim().length > 0;
+}
+
+/**
+ * A body paragraph (no Word heading style) is only treated as a heading when it looks like one:
+ * short, not dialogue, and not a full sentence. This stops lines like "Part of me knew." or
+ * "Copyright 2026 M. Shield. All rights reserved." from starting new chapters.
+ */
+function bodyLineHeadingKind(text: string): "chapter" | "front" | "back" | null {
+  const t = text.trim();
+  const words = t.split(/\s+/).length;
+  if (words > 10 || /^["“‘'(\[]/.test(t)) return null;
+  if (/[.!?,;…"”]$/.test(t) && !/^((chapter|ch\.|part|book)\s+)?([0-9]+|[ivxlcdm]+)\.$/i.test(t)) return null;
+  const kind = headingKind(t);
+  if ((kind === "front" || kind === "back") && words > 5) return null;
+  return kind;
 }
 
 function headingKind(text: string): "chapter" | "front" | "back" | null {
@@ -292,8 +344,10 @@ function buildResult(blocks: RawBlock[], warnings: ImportWarning[], images: numb
     if (b.kind === "title") continue;
     const text = b.text.replace(/\s+$/u, "");
     if (!text.trim()) continue;
-    const isStructuralHeading = b.kind === "heading" && (b.level ?? 1) <= chapterLevel;
-    const detected = b.kind !== "blockquote" ? headingKind(text) : null;
+    const detected = b.kind === "heading" ? headingKind(text) : b.kind === "body" ? bodyLineHeadingKind(text) : null;
+    // A Word heading at the chapter level is a section; so is a deeper heading that reads like
+    // one ("Chapter 3" styled Heading 2 under "Part One" styled Heading 1).
+    const isStructuralHeading = b.kind === "heading" && ((b.level ?? 1) <= chapterLevel || detected !== null);
     if (isStructuralHeading || (b.kind === "body" && detected)) {
       if (b.kind === "body") promoted++;
       let kind: DocChapter["kind"] = detected === "front" || detected === "back" ? detected : "chapter";
@@ -335,7 +389,7 @@ function buildResult(blocks: RawBlock[], warnings: ImportWarning[], images: numb
     });
   }
   // Drop empty chapters created by consecutive headings? Keep them but warn.
-  const empty = chapters.filter((c) => c.paragraphs.length === 0);
+  const empty = chapters.filter((c) => c.paragraphs.length === 0 && !PART_RE.test(c.title));
   if (empty.length)
     warnings.push({
       level: "warning",

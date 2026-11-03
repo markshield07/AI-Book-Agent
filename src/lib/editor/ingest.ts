@@ -90,7 +90,18 @@ export async function ingest(
     const sf = await tx.sourceFile.create({
       data: { projectId, originalName: name, mimeType: mime, sizeBytes: data.length, sha256: sha256(data), storageKey: key, importReport: {} },
     });
-    const matchOf = (ch: DocChapter) => existing.find((e) => norm(e.title) === norm(ch.title) && ch.title !== "Chapter 1");
+    // Match uploaded sections to existing ones by title, pairing repeats in order: the second
+    // "Chapter 1" in the file (e.g. in Part Two) pairs with the second "Chapter 1" in the book.
+    const seen = new Map<string, number>();
+    const matches = new Map<DocChapter, (typeof existing)[number] | undefined>();
+    for (const ch of result.chapters) {
+      const k = norm(ch.title);
+      const n = seen.get(k) ?? 0;
+      seen.set(k, n + 1);
+      const isPlaceholder = ch.title === "Chapter 1" && result.chapters.length === 1;
+      matches.set(ch, isPlaceholder ? undefined : existing.filter((e) => norm(e.title) === k)[n]);
+    }
+    const matchOf = (ch: DocChapter) => matches.get(ch);
     // New sections go where they sit in the uploaded file: right after the previous section
     // the book already has, or before the first one if they come first. A file with no
     // overlap at all is appended at the end.
