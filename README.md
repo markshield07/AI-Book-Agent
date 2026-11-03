@@ -53,6 +53,12 @@ The app currently has **no sign-in**; everything belongs to one owner account cr
 npm test                         # unit + database integration tests (builds a throwaway prisma/test.db)
 ```
 
+Sample manuscripts for trying the app (a short novel with deliberate typos, dialect and continuity slips, as .docx, .txt and .md):
+
+```bash
+npx tsx tests/samples/make-samples.ts samples   # writes samples/lighthouse.docx, .txt, .md
+```
+
 Browser end-to-end test (needs the app running, plus Playwright: `npm i -D playwright && npx playwright install chromium`):
 
 ```bash

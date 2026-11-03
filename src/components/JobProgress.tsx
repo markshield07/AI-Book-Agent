@@ -30,7 +30,7 @@ export function JobProgress({ projectId, initial }: { projectId: string; initial
   const label =
     job.status === "QUEUED" ? "Waiting to start…" :
     job.status === "RUNNING" ? (job.stage === "analysis" ? "Reading the whole manuscript…" : `Editing chapter ${Math.max(1, job.doneSteps)} of ${job.totalSteps - 1}`) :
-    job.status === "SUCCEEDED" ? "Your manuscript is ready for review." :
+    job.status === "SUCCEEDED" ? "Editing pass finished." :
     job.status === "CANCELLED" ? "Editing was stopped. Finished chapters were kept." :
     "Editing stopped because of a problem.";
   const tokens = job.inputTokens + job.outputTokens;

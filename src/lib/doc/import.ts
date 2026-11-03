@@ -235,6 +235,11 @@ export function parseMdInline(src: string): { text: string; marks: Mark[] } {
 
 // ---------- Structure detection ----------
 
+/** Name the app gives to text before the first heading (title page etc.). It is a label for
+ * the author's dashboard only and is never printed as a heading in exported books. */
+export const UNTITLED_FRONT = "Opening pages";
+export const isUntitledFront = (c: { title: string; kind: string }) => c.kind === "front" && c.title === UNTITLED_FRONT;
+
 const NUMBER_WORDS =
   "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty";
 const CHAPTER_RE = new RegExp(
@@ -300,7 +305,7 @@ function buildResult(blocks: RawBlock[], warnings: ImportWarning[], images: numb
     }
     if (!current) {
       // Text before any heading.
-      startChapter("Opening pages", "front");
+      startChapter(UNTITLED_FRONT, "front");
     }
     const ch = current as unknown as DocChapter;
     if (isSceneBreak(text)) {
@@ -315,13 +320,13 @@ function buildResult(blocks: RawBlock[], warnings: ImportWarning[], images: numb
   }
 
   // Short text before the first chapter that has no heading is likely a title page.
-  if (chapters.length > 1 && chapters[0].title === "Opening pages") {
+  if (chapters.length > 1 && chapters[0].title === UNTITLED_FRONT) {
     const words = chapters[0].paragraphs.reduce((n, p) => n + countWords(p.text), 0);
     if (!detectedTitle && words <= 20 && chapters[0].paragraphs.length > 0)
       detectedTitle = chapters[0].paragraphs[0].text;
   }
   // No headings at all: one section.
-  if (chapters.length === 1 && chapters[0].title === "Opening pages") {
+  if (chapters.length === 1 && chapters[0].title === UNTITLED_FRONT) {
     chapters[0].title = "Chapter 1";
     chapters[0].kind = "chapter";
     warnings.push({

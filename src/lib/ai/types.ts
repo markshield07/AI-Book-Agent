@@ -39,6 +39,8 @@ export interface ChunkParagraph {
   ref: string; // short ref sent to the model, e.g. "P12"
   style: string;
   text: string;
+  /** Italic/bold spans already in the author's text, so the editor doesn't ask for formatting that exists. */
+  formatting?: { type: "italic" | "bold"; text: string }[];
 }
 
 export interface EditChunkRequest {
@@ -49,6 +51,7 @@ export interface EditChunkRequest {
   continuity: string; // condensed continuity reference
   chapterTitle: string;
   chapterIndex: number;
+  chapterKind?: "chapter" | "front" | "back";
   chunkIndex: number;
   chunkCount: number;
   paragraphs: ChunkParagraph[];

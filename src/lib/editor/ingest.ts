@@ -90,10 +90,16 @@ export async function ingest(
     const sf = await tx.sourceFile.create({
       data: { projectId, originalName: name, mimeType: mime, sizeBytes: data.length, sha256: sha256(data), storageKey: key, importReport: {} },
     });
-    let position = existing.length ? existing[existing.length - 1].position + 1 : 0;
+    const matchOf = (ch: DocChapter) => existing.find((e) => norm(e.title) === norm(ch.title) && ch.title !== "Chapter 1");
+    // New sections go where they sit in the uploaded file: right after the previous section
+    // the book already has, or before the first one if they come first. A file with no
+    // overlap at all is appended at the end.
+    const anyMatch = result.chapters.some((ch) => matchOf(ch));
+    let anchor: number | null = null; // position of the last section placed or matched
     for (const ch of result.chapters) {
-      const match = existing.find((e) => norm(e.title) === norm(ch.title) && ch.title !== "Chapter 1");
+      const match = matchOf(ch);
       if (match) {
+        anchor = (await tx.chapter.findUniqueOrThrow({ where: { id: match.id }, select: { position: true } })).position;
         if (chapterText(match) === chapterText(ch)) {
           report.unchanged.push(ch.title);
           continue;
@@ -102,7 +108,13 @@ export async function ingest(
         report.pending.push({ key: `${sf.id}:${report.pending.length}`, existingChapterId: match.id, existingTitle: match.title, chapter: ch });
         continue;
       }
-      await insertChapter(tx, projectId, sf.id, ch, position++);
+      let position: number;
+      if (anchor !== null) position = anchor + 1;
+      else if (anyMatch) position = existing[0].position;
+      else position = ((await tx.chapter.aggregate({ where: { projectId }, _max: { position: true } }))._max.position ?? -1) + 1;
+      await tx.chapter.updateMany({ where: { projectId, position: { gte: position } }, data: { position: { increment: 1 } } });
+      await insertChapter(tx, projectId, sf.id, ch, position);
+      anchor = position;
       report.added.push({ title: ch.title, words: chapterWordCount(ch) });
     }
     await tx.sourceFile.update({ where: { id: sf.id }, data: { importReport: report as unknown as Prisma.InputJsonValue } });

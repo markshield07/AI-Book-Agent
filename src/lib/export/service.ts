@@ -25,7 +25,10 @@ export async function approveManuscript(userId: string, projectId: string) {
   if (running) throw new ApprovalBlocked("The editor is still working on this book.");
   if (c.pendingEdits > 0 || c.pendingNotes > 0)
     throw new ApprovalBlocked(
-      `${c.pendingEdits} suggested edit${c.pendingEdits === 1 ? "" : "s"} and ${c.pendingNotes} editorial note${c.pendingNotes === 1 ? "" : "s"} still need a decision.`
+      `${[
+        c.pendingEdits ? `${c.pendingEdits} suggested edit${c.pendingEdits === 1 ? "" : "s"}` : "",
+        c.pendingNotes ? `${c.pendingNotes} editorial note${c.pendingNotes === 1 ? "" : "s"}` : "",
+      ].filter(Boolean).join(" and ")} still need${c.pendingEdits + c.pendingNotes === 1 ? "s" : ""} a decision. Open Review changes to finish them.`
     );
   const chapters = await db.chapter.count({ where: { projectId, active: true } });
   if (chapters === 0) throw new ApprovalBlocked("There is no manuscript to approve yet.");

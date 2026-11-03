@@ -60,6 +60,7 @@ export function editSystemPrompt(mode: EditingMode, intensity: Intensity): strin
 
 Output rules:
 - Each suggestion targets exactly one paragraph, identified by its ref (e.g. "P3").
+- A line in braces after a paragraph, such as {already italic: "Margaret Ann"}, lists formatting the author has already applied. It is not part of the text: never copy it into "original", and don't ask for formatting that is already there.
 - "original" must be copied exactly, character for character, from that paragraph, and must be long enough to be unique within it (include a few surrounding words if needed). Keep it as short as possible otherwise; never span paragraphs.
 - "replacement" is the full text that should replace "original". To delete, use an empty replacement and include the surrounding space in "original".
 - "category" is one of: spelling, grammar, punctuation, typo, word_choice, clarity, redundancy, consistency, dialogue, tense, style, flow, pacing, formatting.
@@ -67,6 +68,9 @@ Output rules:
 - "confidence" is your confidence (0-1) that the author will agree this is an improvement; use lower values for judgment calls.
 - "adds_new_material" is true only if the replacement adds content (not just wording) that was not in the original.
 - Use "notes" for issues that should not be fixed by a direct text change: continuity questions, developmental observations, possible factual problems. Use "" as paragraph for chapter-level notes. Distinguish possible issues from confirmed ones in the wording.
+- Do not suggest changes that only swap straight quotes or apostrophes for curly ones (or the reverse). Typographic quotes are handled automatically when the book is formatted.
+- Do not write notes that only say something is fine or was left unchanged, and do not comment on how sections are numbered or ordered in the file; front matter is counted as separate sections.
+- You only see this section. Don't make claims about wording or formatting in other chapters unless the continuity reference states it.
 - If nothing needs changing, return empty lists.`;
 }
 
@@ -75,7 +79,7 @@ export function editUserPrompt(r: EditChunkRequest): string {
     `Book: "${r.project.title}" by ${r.project.authorName}`,
     `Genre: ${r.project.genre || "not specified"} (${r.project.isFiction ? "fiction" : "nonfiction"}), language ${r.project.language}`,
     `Manuscript status: ${r.project.manuscriptState}`,
-    `Section: "${r.chapterTitle}" (chapter ${r.chapterIndex + 1}), part ${r.chunkIndex + 1} of ${r.chunkCount}`,
+    `Section: "${r.chapterTitle}" (${r.chapterKind === "front" ? "front matter, e.g. title page or dedication" : r.chapterKind === "back" ? "back matter" : "a chapter"}), part ${r.chunkIndex + 1} of ${r.chunkCount}. You see one section at a time; the rest of the book is edited separately.`,
   ].join("\n");
   const rejected = r.rejected.length
     ? `\n<previously_rejected>\nThe author rejected these changes; do not propose them again:\n${r.rejected
@@ -84,7 +88,7 @@ export function editUserPrompt(r: EditChunkRequest): string {
         .join("\n")}\n</previously_rejected>\n`
     : "";
   const body = r.paragraphs
-    .map((p) => `[${p.ref}]${p.style !== "body" ? ` (${p.style})` : ""} ${p.text}`)
+    .map((p) => `[${p.ref}]${p.style !== "body" ? ` (${p.style})` : ""} ${p.text}${p.formatting?.length ? `\n{already ${p.formatting.map((f) => `${f.type}: "${f.text}"`).join("; ")}}` : ""}`)
     .join("\n\n");
   return `<book>\n${meta}\n</book>\n\n<style_sheet>\n${describeStyleSheet(r.styleSheet)}\n</style_sheet>\n\n<continuity_reference>\n${
     r.continuity || "None yet."
@@ -93,7 +97,7 @@ export function editUserPrompt(r: EditChunkRequest): string {
 
 export const ANALYSIS_SYSTEM = `${MASTER_EDITOR}
 
-Task: read the manuscript and build the editorial reference that will guide chapter-by-chapter editing. Do not edit. Record the narrative voice, point of view, tense, recurring conventions (e.g. how dialogue tags, numbers, italics for thoughts are handled), main characters (with every spelling of their names you notice), locations, special terminology, key events, and possible continuity issues. For continuity issues, say which chapter and whether it is possible, likely or confirmed. Be concise.`;
+In the manuscript below, *asterisks* mark text the author has set in italics.\n\nTask: read the manuscript and build the editorial reference that will guide chapter-by-chapter editing. Do not edit. Record the narrative voice, point of view, tense, recurring conventions (e.g. how dialogue tags, numbers, italics for thoughts are handled), main characters (with every spelling of their names you notice), locations, special terminology, key events, and possible continuity issues. For continuity issues, say which chapter and whether it is possible, likely or confirmed. Be concise.`;
 
 export function analysisUserPrompt(r: AnalysisRequest): string {
   const text = r.chapters.map((c) => `## ${c.title}\n${c.text}`).join("\n\n");

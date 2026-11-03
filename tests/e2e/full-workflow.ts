@@ -54,7 +54,7 @@ async function main() {
 
   await page.reload();
   await page.getByRole("button", { name: "Start editing" }).click();
-  await page.getByText("Your manuscript is ready for review.").waitFor({ timeout: 120000 });
+  await page.getByText("Editing pass finished.").waitFor({ timeout: 120000 });
   check(true, "editing job finished with real progress");
   await page.reload();
   await shot("04-job-done");

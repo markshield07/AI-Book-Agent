@@ -26,8 +26,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     db.job.findFirst({ where: { projectId: id }, orderBy: { createdAt: "desc" }, include: { steps: { orderBy: { position: "asc" }, include: { chapter: { select: { title: true } } } } } }),
     db.sourceFile.findMany({ where: { projectId: id }, orderBy: { createdAt: "desc" } }),
     db.exportRecord.findMany({ where: { projectId: id }, orderBy: { createdAt: "desc" }, include: { version: { select: { number: true } } } }),
-    db.continuityRecord.findMany({ where: { projectId: id }, orderBy: [{ kind: "asc" }, { name: "asc" }] }),
-    db.suggestion.groupBy({ by: ["chapterId", "status"], where: { projectId: id }, _count: true }),
+    db.continuityRecord.findMany({ where: { projectId: id }, orderBy: [{ kind: "asc" }, { id: "asc" }] }),
+    db.suggestion.groupBy({ by: ["chapterId", "status", "kind"], where: { projectId: id }, _count: true }),
   ]);
   const info = providerInfo();
   const words = chapters.reduce((n, c) => n + c.wordCount, 0);
@@ -35,7 +35,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const active = job && (job.status === "QUEUED" || job.status === "RUNNING");
   const approved = project.status === "APPROVED";
   const totalSuggestions = counts.pendingEdits + counts.acceptedEdits + counts.rejectedEdits + counts.modifiedEdits + counts.pendingNotes + counts.resolvedNotes;
-  const chCount = (cid: string, st?: string) => perChapter.filter((r) => r.chapterId === cid && (!st || r.status === st)).reduce((n, r) => n + r._count, 0);
+  // Pending counts edits and open notes; accepted/rejected count edits only (resolved notes are not "accepted").
+  const chCount = (cid: string, st?: string) => perChapter.filter((r) => r.chapterId === cid && (!st || r.status === st) && (st === "PENDING" || r.kind === "edit")).reduce((n, r) => n + r._count, 0);
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
@@ -46,7 +47,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           <div>
             <p className="font-medium">
               {counts.pendingEdits + counts.pendingNotes > 0
-                ? `${counts.pendingEdits} suggested edit${counts.pendingEdits === 1 ? " is" : "s are"} waiting for your approval${counts.pendingNotes ? `, plus ${counts.pendingNotes} editorial note${counts.pendingNotes === 1 ? "" : "s"}` : ""}.`
+                ? counts.pendingEdits
+                  ? `${counts.pendingEdits} suggested edit${counts.pendingEdits === 1 ? " is" : "s are"} waiting for your approval${counts.pendingNotes ? `, plus ${counts.pendingNotes} editorial note${counts.pendingNotes === 1 ? "" : "s"}` : ""}.`
+                  : `${counts.pendingNotes} editorial note${counts.pendingNotes === 1 ? " is" : "s are"} waiting for you to read and resolve.`
                 : "All editorial suggestions have been resolved."}
             </p>
             <p className="text-sm muted">{counts.acceptedEdits + counts.modifiedEdits} accepted · {counts.rejectedEdits} rejected</p>
@@ -55,14 +58,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="mt-6 grid gap-6 lg:grid-cols-3 [&>*]:min-w-0">
         <section className="card p-5 lg:col-span-2">
           <div className="flex items-baseline justify-between">
             <h2 className="text-lg font-semibold">Manuscript</h2>
             <p className="text-sm muted">{chapters.length} section{chapters.length === 1 ? "" : "s"} · {words.toLocaleString()} words</p>
           </div>
           {chapters.length > 0 && (
-            <table className="mt-4 w-full text-sm">
+            <div className="mt-4 overflow-x-auto"><table className="w-full text-sm [&_td:not(:first-child)]:pl-3 [&_th:not(:first-child)]:pl-3 [&_td:not(:first-child)]:tabular-nums">
               <thead className="text-left text-xs muted"><tr><th className="py-1 font-normal">Section</th><th className="font-normal">Words</th><th className="font-normal">Pending</th><th className="font-normal">Accepted</th><th className="font-normal">Rejected</th></tr></thead>
               <tbody>
                 {chapters.map((c) => (
@@ -75,7 +78,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
           {pendingReconcile.map((p) => (
             <div key={p.key} className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
@@ -116,7 +119,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           {!active && !approved && chapters.length > 0 && (
             <ActionForm action={startEditingAction} className="mt-5 space-y-4" submit={job ? "Run another editing pass" : "Start editing"} submitClass="btn-accent w-full">
               <input type="hidden" name="projectId" value={id} />
-              <EditingFields d={{ editingMode: project.editingMode, intensity: project.intensity }} />
+              <EditingFields stacked d={{ editingMode: project.editingMode, intensity: project.intensity }} />
               {info.external && !user.aiConsentAt && (
                 <label className="flex items-start gap-2 text-sm">
                   <input type="checkbox" name="consent" className="mt-1" />
@@ -131,7 +134,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         </section>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="mt-6 grid gap-6 lg:grid-cols-3 [&>*]:min-w-0">
         <section className="card p-5 lg:col-span-2">
           <h2 className="text-lg font-semibold">Finalize and download</h2>
           {approved ? (
@@ -145,10 +148,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           ) : (
             <div className="mt-3 text-sm">
               <p className="muted">When every suggestion and note has been resolved, approve the manuscript to freeze the final text. You can download an edited draft at any time; pending suggestions are not applied to drafts.</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <ActionForm action={approveAction} submit="Approve manuscript" submitClass="btn-primary" confirm="Approve and freeze the manuscript? You can reopen editing later.">
+              <div className="mt-4 flex flex-col items-start gap-2">
+                {chapters.length > 0 && <ActionForm action={approveAction} submit="Approve manuscript" submitClass="btn-primary" confirm="Approve and freeze the manuscript? You can reopen editing later.">
                   <input type="hidden" name="projectId" value={id} />
-                </ActionForm>
+                </ActionForm>}
                 {chapters.length > 0 && <ActionForm action={exportAction} submit="Download edited draft (.docx)" submitClass="btn-ghost"><input type="hidden" name="projectId" value={id} /><input type="hidden" name="kind" value="draft" /></ActionForm>}
               </div>
             </div>

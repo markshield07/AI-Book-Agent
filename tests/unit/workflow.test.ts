@@ -1,4 +1,4 @@
-// Integration test of the full Phase 1 path against a real Postgres database:
+// Integration test of the full Phase 1 path against a real (SQLite) database:
 // upload -> edit job -> approve/reject/modify/undo -> approve manuscript -> DOCX export,
 // checking the exported file itself.
 import { describe, it, expect, beforeAll } from "vitest";
@@ -155,6 +155,14 @@ describe("end-to-end editing workflow", () => {
     const chapters = await db.chapter.findMany({ where: { projectId, active: true }, orderBy: { position: "asc" } });
     expect(chapters.map((c) => c.title)).toEqual(["Chapter One", "Chapter Two", "Chapter Three"]);
     expect(await db.suggestion.count({ where: { projectId } })).toBe(before); // earlier decisions retained
+  });
+
+  it("puts newly uploaded sections where they sit in the file, not at the end", async () => {
+    await ingest(userId, projectId, {
+      pastedText: "Prologue\n\nBefore it all.\n\nChapter One\n\n“Ain't nobody could of told me that,” Dre said, grinning.\n\nInterlude\n\nA pause.\n\nChapter Two\n\nIt rained hard. Marisol knew why.",
+    });
+    const chapters = await db.chapter.findMany({ where: { projectId, active: true }, orderBy: { position: "asc" } });
+    expect(chapters.map((c) => c.title)).toEqual(["Prologue", "Chapter One", "Interlude", "Chapter Two", "Chapter Three"]);
   });
 
   it("resumes a failed job from its last checkpoint", async () => {

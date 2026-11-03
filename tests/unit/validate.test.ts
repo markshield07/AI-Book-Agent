@@ -21,6 +21,12 @@ describe("minimize", () => {
 
 describe("validateSuggestions", () => {
   const ps = [para("P1", "I could of gone there. I could of stayed."), para("P2", "Marisol walked in.")];
+  it("drops changes that only swap straight and curly quotes", () => {
+    const q = [para("P1", "He wasn't sure it's \"fine\".")];
+    const r = validateSuggestions([s("P1", "wasn't", "wasn\u2019t"), s("P1", "\"fine\"", "\u201Cfine\u201D"), s("P1", "it's", "its")], q, opts);
+    expect(r.valid.map((v) => v.suggestedText)).toEqual(["its"]);
+    expect(r.discarded.filter((d) => d.reason.startsWith("only changes quote style"))).toHaveLength(2);
+  });
   it("anchors a valid suggestion to exact offsets", () => {
     const { valid } = validateSuggestions([s("P2", "walked in.", "strode in.")], ps, opts);
     expect(valid).toHaveLength(1);

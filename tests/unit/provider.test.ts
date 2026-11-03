@@ -36,6 +36,17 @@ describe("Claude provider", () => {
     expect(user).toContain("Protected terms (never change): Zhaal");
     expect(user).toContain('"gray" -> "grey"');
   });
+  it("tells the editor which words are already italic, and what kind of section it is", () => {
+    const user = editUserPrompt({
+      project: { title: "T", authorName: "A", genre: "", isFiction: true, language: "en-US", manuscriptState: "complete" },
+      mode: "COPYEDIT", intensity: "STANDARD", styleSheet: {}, continuity: "", chapterTitle: "Dedication", chapterKind: "front",
+      chapterIndex: 1, chunkIndex: 0, chunkCount: 1, rejected: [],
+      paragraphs: [{ ref: "P1", style: "body", text: "The Margaret Ann sailed.", formatting: [{ type: "italic", text: "Margaret Ann" }] }],
+    });
+    expect(user).toContain('[P1] The Margaret Ann sailed.\n{already italic: "Margaret Ann"}');
+    expect(user).toContain("front matter");
+    expect(user).not.toMatch(/chapter 2/);
+  });
   it("falls back to automatic checks when no key is configured", () => {
     expect(configuredProviderName()).toBe("rules");
   });

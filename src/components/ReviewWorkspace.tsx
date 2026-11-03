@@ -40,7 +40,7 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
   const [flash, setFlash] = useState<string | null>(null);
   const [modifying, setModifying] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  const [bulkAsk, setBulkAsk] = useState<"accept" | "reject" | null>(null);
+  const [bulkAsk, setBulkAsk] = useState<"accept" | "reject" | "notes" | null>(null);
   const [find, setFind] = useState("");
   const centerRef = useRef<HTMLDivElement>(null);
   const locked = data.project.status === "APPROVED";
@@ -111,12 +111,13 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
     if (nxt) select(nxt.id);
   }
 
-  async function bulk(action: "accept" | "reject") {
+  async function bulk(ask: "accept" | "reject" | "notes") {
     setBulkAsk(null);
-    const out = await post(`/api/chapters/${ch!.id}/bulk`, { action, category: category || undefined, kind: action === "accept" ? "edit" : undefined });
+    const action = ask === "reject" ? "reject" : "accept";
+    const out = await post(`/api/chapters/${ch!.id}/bulk`, { action, category: ask === "notes" ? undefined : category || undefined, kind: ask === "accept" ? "edit" : ask === "notes" ? "note" : undefined });
     if (!out) return;
     await reload(ch!.id);
-    say(`${out.changed} ${action === "accept" ? "approved" : "rejected"}${out.skipped ? ` · ${out.skipped} skipped because they overlap an approved change` : ""}`);
+    say(`${out.changed} ${ask === "notes" ? `note${out.changed === 1 ? "" : "s"} marked resolved` : action === "accept" ? "approved" : "rejected"}${out.skipped ? ` · ${out.skipped} skipped because they overlap an approved change` : ""}`);
   }
 
   async function undo() {
@@ -151,6 +152,7 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
   });
 
   const chapterCounts = data.chapters.find((c) => c.id === ch?.id);
+  const notesHere = suggestions.filter((s) => s.status === "PENDING" && s.kind === "note").length;
   const pendingHere = suggestions.filter((s) => s.status === "PENDING" && s.kind === "edit" && (!category || s.category === category)).length;
 
   return (
@@ -173,7 +175,7 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
           {!locked && <button className="btn-ghost py-1" onClick={undo} disabled={busy} title="Undo (U)">Undo</button>}
           {!locked && ch && (bulkAsk ? (
             <span className="flex items-center gap-2">
-              <span>{bulkAsk === "accept" ? `Approve ${pendingHere} pending edit${pendingHere === 1 ? "" : "s"}` : "Reject all pending suggestions"}{category ? ` in “${CATEGORY_LABEL(category)}”` : ""} in this chapter?</span>
+              <span>{bulkAsk === "notes" ? `Mark ${notesHere} editorial note${notesHere === 1 ? "" : "s"} as resolved` : <>{bulkAsk === "accept" ? `Approve ${pendingHere} pending edit${pendingHere === 1 ? "" : "s"}` : "Reject all pending suggestions"}{category ? ` in “${CATEGORY_LABEL(category)}”` : ""}</>} in this chapter?</span>
               <button className="btn-primary py-1" onClick={() => bulk(bulkAsk)} disabled={busy}>Yes</button>
               <button className="btn-ghost py-1" onClick={() => setBulkAsk(null)}>Cancel</button>
             </span>
@@ -181,6 +183,7 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
             <>
               <button className="btn-ghost py-1" onClick={() => setBulkAsk("accept")} disabled={busy || pendingHere === 0}>Approve all in chapter</button>
               <button className="btn-ghost py-1" onClick={() => setBulkAsk("reject")} disabled={busy || !suggestions.some((s) => s.status === "PENDING")}>Reject all in chapter</button>
+              {notesHere > 0 && <button className="btn-ghost py-1" onClick={() => setBulkAsk("notes")} disabled={busy}>Resolve all notes</button>}
             </>
           ))}
         </div>

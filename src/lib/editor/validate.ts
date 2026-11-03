@@ -112,6 +112,10 @@ export function validateSuggestions(
       drop(r, "no change");
       continue;
     }
+    if (straightQuotes(r.original) === straightQuotes(r.replacement)) {
+      drop(r, "only changes quote style (handled when the book is formatted)");
+      continue;
+    }
     const anchorStart = p.text.indexOf(r.original);
     // Minimise against the whole paragraph so word expansion can use real context.
     const edited = p.text.slice(0, anchorStart) + r.replacement + p.text.slice(anchorStart + r.original.length);
@@ -193,4 +197,9 @@ export function validateSuggestions(
     });
   }
   return { valid, discarded };
+}
+
+/** Straight/curly quote marks treated as the same character. */
+export function straightQuotes(s: string): string {
+  return s.replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'").replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"');
 }

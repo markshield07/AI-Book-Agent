@@ -65,9 +65,9 @@ export function BookFields({ d }: { d: ProjectDefaults }) {
   );
 }
 
-export function EditingFields({ d }: { d: ProjectDefaults }) {
+export function EditingFields({ d, stacked = false }: { d: ProjectDefaults; stacked?: boolean }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className={stacked ? "grid gap-4" : "grid gap-4 md:grid-cols-2"}>
       <div>
         <label className="label" htmlFor="editingMode">Editing level</label>
         <select id="editingMode" name="editingMode" className="input" defaultValue={d.editingMode ?? "COPYEDIT"}>

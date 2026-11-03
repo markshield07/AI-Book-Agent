@@ -5,7 +5,7 @@ import type { EditingMode, Intensity, Job, Prisma } from "@prisma/client";
 import { db } from "../db";
 import { getProvider, providerInfo } from "../ai";
 import { ProviderError, type ProjectContext, type StyleSheet, type ChunkParagraph } from "../ai/types";
-import { countWords } from "../doc/model";
+import { countWords, type Mark } from "../doc/model";
 import { validateSuggestions, type ParagraphRef } from "./validate";
 import { audit } from "../audit";
 
@@ -175,16 +175,24 @@ function projectContext(p: { title: string; authorName: string; genre: string; i
 
 type JobWithProject = Job & { project: { id: string; title: string; authorName: string; genre: string; isFiction: boolean; language: string; manuscriptState: string; styleSheet: Prisma.JsonValue } };
 
+function withEmphasis(text: string, marks: Mark[]): string {
+  let out = text;
+  for (const m of [...marks].filter((m) => m.type === "italic" && m.end > m.start).sort((a, b) => b.start - a.start))
+    out = `${out.slice(0, m.start)}*${out.slice(m.start, m.end)}*${out.slice(m.end)}`;
+  return out;
+}
+
 async function runAnalysis(job: JobWithProject, provider: ReturnType<typeof getProvider>) {
   const chapters = await db.chapter.findMany({
     where: { projectId: job.projectId, active: true },
     orderBy: { position: "asc" },
-    include: { paragraphs: { orderBy: { position: "asc" }, select: { text: true, style: true } } },
+    include: { paragraphs: { orderBy: { position: "asc" }, select: { text: true, style: true, marks: true } } },
   });
   const total = chapters.reduce((n, c) => n + c.wordCount, 0);
   const ratio = total > ANALYSIS_WORD_BUDGET ? ANALYSIS_WORD_BUDGET / total : 1;
   const input = chapters.map((c) => {
-    const paras = c.paragraphs.filter((p) => p.style !== "scene_break").map((p) => p.text);
+    // Italics shown as *...* so the analysis can see the author's existing formatting.
+    const paras = c.paragraphs.filter((p) => p.style !== "scene_break").map((p) => withEmphasis(p.text, (p.marks ?? []) as unknown as Mark[]));
     if (ratio >= 1) return { title: c.title, text: paras.join("\n") };
     // Excerpt long books evenly: keep the opening and closing of each chapter.
     const keep = Math.max(200, Math.floor(c.wordCount * ratio));
@@ -315,7 +323,10 @@ async function runChapter(job: JobWithProject, provider: ReturnType<typeof getPr
   for (let ci = 0; ci < chunks.length; ci++) {
     await checkCancel(job.id);
     const chunk = chunks[ci];
-    const paragraphs: ChunkParagraph[] = chunk.map((r) => ({ ref: r.ref, style: r.style, text: r.text }));
+    const paragraphs: ChunkParagraph[] = chunk.map((r) => {
+      const marks = ((chapter.paragraphs.find((p) => p.id === r.paragraphId)?.marks ?? []) as unknown as Mark[]).filter((m) => m.end > m.start);
+      return { ref: r.ref, style: r.style, text: r.text, ...(marks.length ? { formatting: marks.map((m) => ({ type: m.type, text: r.text.slice(m.start, m.end) })) } : {}) };
+    });
     const { result, usage: u } = await provider.editChunk({
       project: projectContext(project),
       mode: job.editingMode,
@@ -324,6 +335,7 @@ async function runChapter(job: JobWithProject, provider: ReturnType<typeof getPr
       continuity,
       chapterTitle: chapter.title,
       chapterIndex: position,
+      chapterKind: chapter.kind as "chapter" | "front" | "back",
       chunkIndex: ci,
       chunkCount: chunks.length,
       paragraphs,
