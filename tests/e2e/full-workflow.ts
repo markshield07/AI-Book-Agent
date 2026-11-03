@@ -1,4 +1,4 @@
-// Browser test of the complete author workflow against a running app (default http://localhost:3000):
+// Browser test of the complete author workflow against a running app (default http://localhost:3100):
 // create book -> upload DOCX -> run editor -> approve/reject/modify/undo -> bulk -> approve
 // manuscript -> download approved DOCX -> verify the downloaded file's contents.
 import { chromium } from "playwright";
@@ -7,7 +7,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fixtureDocx } from "./make-fixture";
 
-const BASE = process.env.E2E_BASE_URL || "http://localhost:3000";
+const BASE = process.env.E2E_BASE_URL || "http://localhost:3100";
 const OUT = process.env.E2E_OUT || "test-results";
 
 function check(cond: unknown, msg: string) {

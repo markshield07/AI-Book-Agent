@@ -13,7 +13,7 @@ npm install
 cp .env.example .env            # then edit DATABASE_URL and add ANTHROPIC_API_KEY
 npx prisma migrate deploy       # create the database tables
 npm run build
-npm start                       # web app on http://localhost:3000 + background editing worker
+npm start                       # web app on http://localhost:3100 (change the port in package.json if 3100 is taken) + background editing worker
 ```
 
 For development, use `npm run dev` instead of `build` + `start`.
