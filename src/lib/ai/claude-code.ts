@@ -2,7 +2,7 @@
 // the author's own Claude subscription (Pro/Max) instead of a paid API key.
 // Requires `claude` to be installed and signed in once with `claude` -> /login.
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { z } from "zod";
@@ -20,11 +20,43 @@ import { ANALYSIS_SYSTEM, analysisUserPrompt, editSystemPrompt, editUserPrompt }
 
 export const claudeBin = () => process.env.CLAUDE_CLI || "claude";
 
+/**
+ * Work out how to launch Claude Code without a shell (so long prompts and JSON never pass
+ * through shell quoting). On Windows, npm installs `claude.cmd`, which Node can't spawn
+ * directly, so we follow the shim to the real .js or .exe it points at.
+ */
+export function resolveClaude(): { cmd: string; prefix: string[] } {
+  const bin = claudeBin();
+  const viaNode = (js: string) => ({ cmd: process.execPath, prefix: [js] });
+  if (bin.toLowerCase().endsWith(".js")) return viaNode(bin);
+  if (process.platform !== "win32") return { cmd: bin, prefix: [] };
+  let candidates: string[] = [bin];
+  if (!/[\\/]/.test(bin)) {
+    try {
+      candidates = execFileSync("where", [bin], { encoding: "utf8", timeout: 10_000 }).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    } catch {
+      candidates = [];
+    }
+  }
+  const exe = candidates.find((c) => c.toLowerCase().endsWith(".exe"));
+  if (exe) return { cmd: exe, prefix: [] };
+  const shim = candidates.find((c) => c.toLowerCase().endsWith(".cmd"));
+  if (shim) {
+    const target = readFileSync(shim, "utf8").match(/%dp0%\\([^"%\r\n]+\.(?:js|exe))/i)?.[1];
+    if (target) {
+      const full = path.join(path.dirname(shim), target);
+      return full.toLowerCase().endsWith(".js") ? viaNode(full) : { cmd: full, prefix: [] };
+    }
+  }
+  return { cmd: bin, prefix: [] };
+}
+
 let available: boolean | null = null;
 export function claudeCliAvailable(): boolean {
   if (available === null) {
     try {
-      execFileSync(claudeBin(), ["--version"], { stdio: "ignore", timeout: 10_000 });
+      const { cmd, prefix } = resolveClaude();
+      execFileSync(cmd, [...prefix, "--version"], { stdio: "ignore", timeout: 15_000 });
       available = true;
     } catch {
       available = false;
@@ -53,7 +85,8 @@ export function runClaude(args: string[], input: string, timeoutMs: number): Pro
     const env = { ...process.env };
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
-    const child = spawn(claudeBin(), args, { cwd: sandbox(), env, stdio: ["pipe", "pipe", "pipe"] });
+    const { cmd, prefix } = resolveClaude();
+    const child = spawn(cmd, [...prefix, ...args], { cwd: sandbox(), env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => child.kill("SIGTERM"), timeoutMs);
