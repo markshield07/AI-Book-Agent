@@ -1,0 +1,337 @@
+// The Editorial Studio data model.
+// Invariant: imported paragraph text is never mutated. Every edited view of the
+// manuscript is assembled deterministically from paragraphs + accepted suggestions.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  // Author must opt in before manuscript text is sent to an external AI provider.
+  aiConsentAt  DateTime?
+
+  sessions    Session[]
+  resetTokens PasswordResetToken[]
+  projects    Project[]
+  decisions   Decision[]
+  auditEvents AuditEvent[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+enum ProjectStatus {
+  DRAFT
+  UPLOADED
+  ANALYZING
+  EDITING
+  AWAITING_REVIEW
+  REVISIONS_REQUESTED
+  APPROVED
+  FORMATTING
+  READY
+  EXPORT_FAILED
+}
+
+enum EditingMode {
+  PROOFREAD
+  COPYEDIT
+  LINE_EDIT
+  DEVELOPMENTAL
+}
+
+enum Intensity {
+  LIGHT
+  STANDARD
+  INTENSIVE
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  authorName      String
+  genre           String        @default("")
+  isFiction       Boolean       @default(true)
+  language        String        @default("en-US")
+  manuscriptState String        @default("complete") // complete | partial | revision | republish
+  targetFormats   String[]      @default(["kindle", "paperback"])
+  editingMode     EditingMode   @default(COPYEDIT)
+  intensity       Intensity     @default(STANDARD)
+  status          ProjectStatus @default(DRAFT)
+  styleSheet      Json          @default("{}")
+  archived        Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  sourceFiles  SourceFile[]
+  chapters     Chapter[]
+  suggestions  Suggestion[]
+  jobs         Job[]
+  versions     ManuscriptVersion[]
+  exports      ExportRecord[]
+  continuity   ContinuityRecord[]
+  auditEvents  AuditEvent[]
+
+  @@index([userId])
+}
+
+// The immutable original upload. Stored on disk under an unguessable key.
+model SourceFile {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  storageKey   String   @unique
+  importReport Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  chapters Chapter[]
+}
+
+model Chapter {
+  id           String     @id @default(cuid())
+  projectId    String
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceFileId String?
+  sourceFile   SourceFile? @relation(fields: [sourceFileId], references: [id], onDelete: SetNull)
+  position     Int
+  title        String
+  kind         String     @default("chapter") // chapter | front | back
+  wordCount    Int        @default(0)
+  // active chapters make up the manuscript; superseded ones are kept for history
+  active       Boolean    @default(true)
+  supersededById String?
+  createdAt    DateTime   @default(now())
+
+  paragraphs  Paragraph[]
+  suggestions Suggestion[]
+  jobSteps    JobStep[]
+
+  @@index([projectId, position])
+}
+
+model Paragraph {
+  id        String  @id @default(cuid())
+  chapterId String
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  position  Int
+  // body | heading | scene_break | blockquote
+  style     String  @default("body")
+  text      String
+  // inline formatting: [{ start, end, type: "italic" | "bold" }]
+  marks     Json    @default("[]")
+
+  suggestions Suggestion[]
+
+  @@index([chapterId, position])
+}
+
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  MODIFIED // author wrote their own replacement; treated as accepted
+}
+
+model Suggestion {
+  id            String           @id @default(cuid())
+  projectId     String
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapterId     String
+  chapter       Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  // null for chapter-level editorial notes
+  paragraphId   String?
+  paragraph     Paragraph?       @relation(fields: [paragraphId], references: [id], onDelete: Cascade)
+  jobId         String?
+  kind          String           @default("edit") // edit | note
+  start         Int              @default(0)
+  end           Int              @default(0)
+  originalText  String           @default("")
+  suggestedText String           @default("")
+  authorText    String?
+  category      String
+  explanation   String
+  severity      String           @default("minor") // minor | moderate | major
+  confidence    Float            @default(0.8)
+  status        SuggestionStatus @default(PENDING)
+  origin        String           @default("ai") // ai | rules | chat
+  // what the AI did: edit (changes existing text) | addition (adds creative material)
+  contribution  String           @default("edit")
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  decisions Decision[]
+
+  @@index([projectId, chapterId, status])
+  @@index([paragraphId])
+}
+
+model Decision {
+  id             String           @id @default(cuid())
+  suggestionId   String
+  suggestion     Suggestion       @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batchId        String?          // shared by decisions made together (bulk actions)
+  fromStatus     SuggestionStatus
+  toStatus       SuggestionStatus
+  fromAuthorText String?
+  authorText     String?
+  undone         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  @@index([suggestionId])
+  @@index([userId, createdAt])
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model Job {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type            String    @default("edit")
+  status          JobStatus @default(QUEUED)
+  editingMode     EditingMode
+  intensity       Intensity
+  provider        String
+  model           String
+  stage           String    @default("queued") // queued | analysis | editing | done
+  totalSteps      Int       @default(0)
+  doneSteps       Int       @default(0)
+  cancelRequested Boolean   @default(false)
+  error           String?
+  inputTokens     Int       @default(0)
+  outputTokens    Int       @default(0)
+  lockedAt        DateTime?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  steps JobStep[]
+
+  @@index([status, createdAt])
+}
+
+// Chapter-level checkpoint inside an editing job.
+model JobStep {
+  id           String    @id @default(cuid())
+  jobId        String
+  job          Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  chapterId    String?
+  chapter      Chapter?  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  kind         String    @default("chapter") // analysis | chapter
+  position     Int
+  status       JobStatus @default(QUEUED)
+  attempts     Int       @default(0)
+  error        String?
+  suggestionsCreated Int @default(0)
+  suggestionsDiscarded Int @default(0)
+  inputTokens  Int       @default(0)
+  outputTokens Int       @default(0)
+  finishedAt   DateTime?
+
+  @@index([jobId, position])
+}
+
+model ContinuityRecord {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      String   // character | location | term | event | pov | style
+  name      String
+  details   String
+  chapters  String[] @default([])
+  createdAt DateTime @default(now())
+
+  @@index([projectId, kind])
+}
+
+// A frozen manuscript state: the decision state + assembled text at a point in time.
+model ManuscriptVersion {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number     Int
+  kind       String   // import | approved | checkpoint | restore
+  label      String
+  // { suggestionId: { status, authorText } }
+  decisions  Json
+  // [{ chapterId, title, kind, paragraphs: [{ id, style, text, marks }] }]
+  snapshot   Json
+  wordCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  exports ExportRecord[]
+
+  @@unique([projectId, number])
+}
+
+model ExportRecord {
+  id         String            @id @default(cuid())
+  projectId  String
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionId  String?
+  version    ManuscriptVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  format     String            // docx_approved | docx_draft | editorial_report
+  filename   String
+  storageKey String            @unique
+  sizeBytes  Int
+  isFinal    Boolean           @default(false)
+  config     Json              @default("{}")
+  validation Json              @default("{}")
+  createdAt  DateTime          @default(now())
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  action    String
+  details   Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
+}
