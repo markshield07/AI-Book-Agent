@@ -234,7 +234,7 @@ async function runAnalysis(job: JobWithProject, provider: ReturnType<typeof getP
           explanation: `${c.certainty === "confirmed" ? "Inconsistency" : c.certainty === "likely" ? "Likely inconsistency" : "Possible inconsistency"}: ${c.description}`,
           severity: c.certainty === "confirmed" ? "major" : "moderate",
           confidence: c.certainty === "confirmed" ? 0.9 : c.certainty === "likely" ? 0.7 : 0.5,
-          origin: job.provider === "anthropic" ? "ai" : "rules",
+          origin: job.provider === "rules" ? "rules" : "ai",
         },
       });
     }
@@ -303,7 +303,7 @@ async function runChapter(job: JobWithProject, provider: ReturnType<typeof getPr
   const usage = { inputTokens: 0, outputTokens: 0 };
   let created = 0;
   let discarded = 0;
-  const origin = job.provider === "anthropic" ? "ai" : "rules";
+  const origin = job.provider === "rules" ? "rules" : "ai";
   for (let ci = 0; ci < chunks.length; ci++) {
     await checkCancel(job.id);
     const chunk = chunks[ci];

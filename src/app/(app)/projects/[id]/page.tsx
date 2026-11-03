@@ -120,7 +120,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               {info.external && !user.aiConsentAt && (
                 <label className="flex items-start gap-2 text-sm">
                   <input type="checkbox" name="consent" className="mt-1" />
-                  <span>I understand my manuscript text will be sent to Anthropic's API for editing. It is not used to train models, and I keep all rights to my work.</span>
+                  <span>I understand the chapters being edited will be sent to Anthropic for processing by Claude. Whether they may be used to improve models follows my Claude account's privacy settings. I keep all rights to my work.</span>
                 </label>
               )}
               {job && <p className="text-xs muted">Another pass keeps every decision you've made. Changes you rejected won't be suggested again.</p>}

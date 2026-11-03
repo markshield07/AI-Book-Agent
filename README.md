@@ -27,16 +27,28 @@ createuser -P studio            # password: studio (or change DATABASE_URL)
 createdb -O studio editorial_studio
 ```
 
-### AI configuration
+### AI: use your Claude subscription (no API key)
+
+The Master Editor runs through **Claude Code** on your computer, so it uses your Claude Pro/Max subscription and costs nothing extra.
+
+1. Install Claude Code: `npm install -g @anthropic-ai/claude-code` (or see claude.com/claude-code).
+2. Run `claude` once in a terminal, type `/login`, and sign in with your Claude account. You can close it afterwards.
+3. Start the app. It detects Claude Code automatically; the book page says "Claude, using your Claude subscription".
+
+The app removes any `ANTHROPIC_API_KEY` from Claude Code's environment, so editing never switches to pay-as-you-go billing.
+
+**Usage limits:** editing counts toward your subscription's usage limits. A full novel can take more than one limit window. If the limit is reached, the job stops with a message, every finished chapter is kept, and **Resume** continues from where it stopped once the limit resets. Use `AI_MODEL=sonnet` to stretch your limits further.
 
 | Variable | Purpose |
 | --- | --- |
-| `ANTHROPIC_API_KEY` | Enables the Claude-powered Master Editor. Get a key at console.anthropic.com. |
-| `AI_MODEL` | Model id, default `claude-opus-5-5`. Change it to upgrade without code changes. |
+| `AI_PROVIDER` | `claude-code` (default when Claude Code is installed), `anthropic` (API key, pay-as-you-go), or `rules` (offline mechanical checks only, clearly labelled "Automatic checks"). |
+| `AI_MODEL` | `opus` (default), `sonnet`, `haiku`, or a full model id. |
 | `AI_EFFORT` / `AI_ANALYSIS_EFFORT` | How hard the model thinks for chapter edits / whole-book analysis. |
-| `AI_PROVIDER` | `anthropic` or `rules`. With no key, the app falls back to `rules`: a small, honest set of mechanical checks (doubled words, spacing, common misspellings), clearly labelled "Automatic checks" in the UI. |
+| `CLAUDE_CLI` | Path to the `claude` command if it isn't on your PATH. |
 
-Before the first AI pass, the app asks you to confirm that manuscript text will be sent to Anthropic's API.
+Before the first AI pass, the app asks you to confirm that manuscript text will be sent to Claude. Whether Anthropic may use it to improve models follows your Claude account's privacy settings.
+
+Quick check that it works: `npx tsx tests/live-claude-code.ts` edits one test sentence and prints the suggestions.
 
 ## Single-author mode (no login)
 

@@ -28,7 +28,7 @@ export async function buildReportDocx(projectId: string, project: { title: strin
     new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("Summary")] }),
     new Paragraph(`Suggested edits: ${edits.length}. Accepted: ${edits.filter((s) => s.status === "ACCEPTED").length}. Accepted with author changes: ${edits.filter((s) => s.status === "MODIFIED").length}. Rejected: ${edits.filter((s) => s.status === "REJECTED").length}. Pending: ${edits.filter((s) => s.status === "PENDING").length}.`),
     new Paragraph(`Editorial notes: ${all.filter((s) => s.kind === "note").length}.`),
-    new Paragraph(`Editing passes: ${jobs.map((j) => `${MODE_LABEL[j.editingMode]} (${j.provider === "anthropic" ? `AI: ${j.model}` : "automatic checks"}, ${j.status.toLowerCase()})`).join("; ") || "none"}.`),
+    new Paragraph(`Editing passes: ${jobs.map((j) => `${MODE_LABEL[j.editingMode]} (${j.provider !== "rules" ? `AI: ${j.model}` : "automatic checks"}, ${j.status.toLowerCase()})`).join("; ") || "none"}.`),
     new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("AI contribution")] }),
     new Paragraph(
       `${applied.length} accepted change${applied.length === 1 ? "" : "s"} edited the author's existing text. ${additions.length} accepted change${

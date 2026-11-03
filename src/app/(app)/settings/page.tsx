@@ -23,7 +23,9 @@ export default async function Settings() {
         <p className="mt-2">Editing provider: <strong>{info.label}</strong>{info.external ? <> (model <code>{info.model}</code>)</> : null}.</p>
         <p className="mt-2 muted">
           {info.external
-            ? "When you start an editing pass, the text of the chapters being edited is sent to Anthropic's API. Anthropic does not train models on API data by default. Nothing is sent until you start a pass, and your files stay in this app's private storage."
+            ? info.name === "claude-code"
+              ? "When you start an editing pass, the chapters being edited are sent to Claude through the Claude Code app signed in on this computer, using your subscription's usage. Whether Anthropic may use them to improve models follows your Claude account's privacy settings (claude.ai → Settings → Privacy). Nothing is sent until you start a pass, and your files stay on this computer."
+              : "When you start an editing pass, the chapters being edited are sent to Anthropic's API. Anthropic does not train models on API data by default. Nothing is sent until you start a pass, and your files stay in this app's private storage."
             : "No AI key is configured, so only automatic mechanical checks run, entirely on this server."}
         </p>
         <p className="mt-2 muted">You keep full ownership of your work. Edits are only suggestions until you approve them.</p>

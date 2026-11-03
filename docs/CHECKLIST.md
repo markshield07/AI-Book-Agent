@@ -40,6 +40,7 @@ Status as of Phase 1. "Working" means implemented and covered by automated tests
 
 ## Known limitations
 
-- The Claude integration is implemented against the current SDK and covered by schema/prompt tests, but has **not yet been run against the live API from this environment** (no API key was available). Run one short chapter with `ANTHROPIC_API_KEY` set before a full book.
+- The subscription editor (Claude Code) was smoke-tested live on a test passage (`tests/live-claude-code.ts`): it returned valid structured suggestions that passed validation and preserved dialect in dialogue. A full-length book has not been run yet.
+- The API-key provider (`AI_PROVIDER=anthropic`) is implemented but has not been run live (no key was available).
 - Import splits plain-text paragraphs heuristically (blank-line separated vs one-line-per-paragraph).
 - Sign-in throttling, email and password reset were removed with accounts.

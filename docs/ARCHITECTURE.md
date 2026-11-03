@@ -29,7 +29,10 @@ Chapters are split into ~2,500-word chunks at paragraph boundaries. Each request
 
 ## AI provider layer
 
-`EditorProvider` (`src/lib/ai/types.ts`) has two methods: `analyze` and `editChunk`. `AnthropicEditor` uses the official SDK with streaming, adaptive thinking, configurable effort, server-side refusal fallback, and JSON-schema structured output. The model id is an environment variable. Manuscript text is wrapped in `<manuscript>` tags and the system prompt instructs the model to treat it as data, not instructions.
+`EditorProvider` (`src/lib/ai/types.ts`) has two methods: `analyze` and `editChunk`. Three implementations:
+
+- `ClaudeCodeEditor` (default): runs `claude -p --output-format json --json-schema …` with tools, MCP servers and settings disabled, in an empty temp directory, with API-key variables stripped from its environment. It uses the author's Claude subscription. Usage-limit errors are retryable, so a job resumes from its last checkpoint after the limit resets.
+- `AnthropicEditor` (optional, API key): the official SDK with streaming, adaptive thinking, configurable effort, server-side refusal fallback, and JSON-schema structured output. The model id is an environment variable. Manuscript text is wrapped in `<manuscript>` tags and the system prompt instructs the model to treat it as data, not instructions.
 
 Separate prompts per editing mode (proofread, copyedit, line edit, developmental) share one editorial philosophy: preserve voice and dialect, never invent plot or facts, distinguish mistakes from style. Developmental review returns notes, not text edits. Continuity concerns become reviewable notes labelled possible / likely / confirmed.
 
