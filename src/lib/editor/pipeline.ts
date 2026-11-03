@@ -63,19 +63,27 @@ export async function resumeJob(projectId: string, jobId: string) {
   await db.project.update({ where: { id: projectId }, data: { status: "EDITING" } });
 }
 
-/** Atomically claim the next queued job (or one whose worker died). */
+/**
+ * Claim the next queued job (or one whose worker died). The claim is a compare-and-set
+ * update on the row's previous status/lock, so two workers can never take the same job.
+ */
 export async function claimJob(): Promise<string | null> {
-  const rows = await db.$queryRaw<{ id: string }[]>`
-    UPDATE "Job" SET status = 'RUNNING', "lockedAt" = now(), "startedAt" = COALESCE("startedAt", now())
-    WHERE id = (
-      SELECT id FROM "Job"
-      WHERE status = 'QUEUED' OR (status = 'RUNNING' AND "lockedAt" < now() - interval '10 minutes')
-      ORDER BY "createdAt" ASC
-      FOR UPDATE SKIP LOCKED
-      LIMIT 1
-    )
-    RETURNING id`;
-  return rows[0]?.id ?? null;
+  const stale = new Date(Date.now() - 10 * 60_000);
+  const candidates = await db.job.findMany({
+    where: { OR: [{ status: "QUEUED" }, { status: "RUNNING", lockedAt: { lt: stale } }] },
+    orderBy: { createdAt: "asc" },
+    take: 5,
+    select: { id: true, status: true, lockedAt: true, startedAt: true },
+  });
+  for (const c of candidates) {
+    const now = new Date();
+    const won = await db.job.updateMany({
+      where: { id: c.id, status: c.status, lockedAt: c.lockedAt },
+      data: { status: "RUNNING", lockedAt: now, startedAt: c.startedAt ?? now },
+    });
+    if (won.count === 1) return c.id;
+  }
+  return null;
 }
 
 class Cancelled extends Error {}
@@ -208,7 +216,7 @@ async function runAnalysis(job: JobWithProject, provider: ReturnType<typeof getP
       chapters: c.chapters,
     })),
     ...result.locations.map((l) => ({ projectId: job.projectId, kind: "location", name: l.name, details: l.description, chapters: l.chapters })),
-    ...result.terms.map((t) => ({ projectId: job.projectId, kind: "term", name: t.name, details: t.description })),
+    ...result.terms.map((t) => ({ projectId: job.projectId, kind: "term", name: t.name, details: t.description, chapters: [] })),
     ...result.events.map((e) => ({ projectId: job.projectId, kind: "event", name: e.name, details: e.description, chapters: e.chapters })),
   ];
   await db.$transaction(async (tx) => {

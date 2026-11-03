@@ -88,7 +88,7 @@ export async function ingest(
 
   const sf = await db.$transaction(async (tx) => {
     const sf = await tx.sourceFile.create({
-      data: { projectId, originalName: name, mimeType: mime, sizeBytes: data.length, sha256: sha256(data), storageKey: key },
+      data: { projectId, originalName: name, mimeType: mime, sizeBytes: data.length, sha256: sha256(data), storageKey: key, importReport: {} },
     });
     let position = existing.length ? existing[existing.length - 1].position + 1 : 0;
     for (const ch of result.chapters) {

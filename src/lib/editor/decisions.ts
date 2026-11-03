@@ -66,7 +66,7 @@ export async function decide(userId: string, suggestionId: string, action: Actio
       });
       return tx.suggestion.update({ where: { id: s.id }, data: { status: to, authorText: newAuthorText } });
     },
-    { isolationLevel: "Serializable" }
+    { timeout: 30_000 }
   );
 }
 
@@ -122,7 +122,7 @@ export async function decideBulk(
       }
       return { changed, skipped: skipped.length, batchId };
     },
-    { isolationLevel: "Serializable", timeout: 60_000 }
+    { timeout: 60_000 }
   );
 }
 
@@ -151,6 +151,6 @@ export async function undoLast(userId: string, projectId: string) {
       }
       return { undone: batch.length };
     },
-    { isolationLevel: "Serializable", timeout: 60_000 }
+    { timeout: 60_000 }
   );
 }

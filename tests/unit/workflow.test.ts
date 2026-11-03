@@ -44,7 +44,7 @@ describe("end-to-end editing workflow", () => {
     await db.job.updateMany({ where: { status: { in: ["QUEUED", "RUNNING"] } }, data: { status: "CANCELLED" } });
     const u = await makeUser("author");
     userId = u.id;
-    const p = await db.project.create({ data: { userId, title: "The Long Night", authorName: "A. Writer" } });
+    const p = await db.project.create({ data: { userId, title: "The Long Night", authorName: "A. Writer", targetFormats: ["kindle"], styleSheet: {} } });
     projectId = p.id;
   });
 

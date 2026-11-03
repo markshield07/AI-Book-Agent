@@ -115,7 +115,7 @@ export async function duplicateProjectAction(form: FormData) {
     const p = await tx.project.create({
       data: {
         userId: user.id, title: `${src.title} (copy)`, authorName: src.authorName, genre: src.genre, isFiction: src.isFiction,
-        language: src.language, manuscriptState: src.manuscriptState, targetFormats: src.targetFormats, editingMode: src.editingMode,
+        language: src.language, manuscriptState: src.manuscriptState, targetFormats: (src.targetFormats ?? []) as Prisma.InputJsonValue, editingMode: src.editingMode,
         intensity: src.intensity, styleSheet: src.styleSheet as Prisma.InputJsonValue,
         status: chapters.length ? (chapters.some((c) => c.suggestions.length) ? "AWAITING_REVIEW" : "UPLOADED") : "DRAFT",
       },

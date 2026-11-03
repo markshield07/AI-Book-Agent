@@ -14,7 +14,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const where: Prisma.ProjectWhereInput = {
     userId: user.id,
     archived: sp.archived === "1",
-    ...(sp.q ? { OR: [{ title: { contains: sp.q, mode: "insensitive" } }, { authorName: { contains: sp.q, mode: "insensitive" } }] } : {}),
+    ...(sp.q ? { OR: [{ title: { contains: sp.q } }, { authorName: { contains: sp.q } }] } : {}),
     ...(sp.status && sp.status in STATUS_LABEL ? { status: sp.status as Prisma.EnumProjectStatusFilter["equals"] } : {}),
   };
   const orderBy: Prisma.ProjectOrderByWithRelationInput =

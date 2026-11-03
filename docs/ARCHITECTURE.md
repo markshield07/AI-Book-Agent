@@ -21,11 +21,11 @@ Discarded suggestions are logged with reasons, never shown.
 
 ## Long manuscripts: durable jobs with chapter checkpoints
 
-`Job` + `JobStep` (one analysis step, then one step per chapter) live in Postgres. Workers claim jobs with `FOR UPDATE SKIP LOCKED` and keep a heartbeat; a job whose worker died is reclaimed after 10 minutes and resumes from the first unfinished chapter. Each step retries up to 3 times with exponential backoff (on top of the SDK's own 429/5xx retries); non-retryable errors (bad API key, refusal) fail fast with a plain-language message. Cancelling is checked between chunks. Progress shown to the author is the real step count, and token usage is recorded per step and job.
+`Job` + `JobStep` (one analysis step, then one step per chapter) live in the database (SQLite file, WAL mode). Workers claim jobs with a compare-and-set update (only one worker's `updateMany` matches the job's current status and lock time) and keep a heartbeat; a job whose worker died is reclaimed after 10 minutes and resumes from the first unfinished chapter. Each step retries up to 3 times with exponential backoff (on top of the SDK's own 429/5xx retries); non-retryable errors (bad API key, refusal) fail fast with a plain-language message. Cancelling is checked between chunks. Progress shown to the author is the real step count, and token usage is recorded per step and job.
 
 Chapters are split into ~2,500-word chunks at paragraph boundaries. Each request carries the style sheet, a continuity reference built by the analysis step (characters, locations, terms, events, observed voice/POV/tense), and the author's earlier rejections for that chapter.
 
-**Why Postgres instead of Redis for the queue?** One fewer service to run for a single author, transactional consistency between job state and suggestions, and it already provides locking. The `claimJob`/`runJob` boundary is small, so moving to BullMQ/Redis later is contained.
+**Why SQLite, and no Redis for the queue?** Nothing to install or keep running for a single author on their own computer, transactional consistency between job state and suggestions, and backups are a file copy. The schema avoids Postgres-only features, so switching `provider` to `postgresql` for a hosted multi-user version is a small change. The `claimJob`/`runJob` boundary is small, so moving to BullMQ/Redis later is contained.
 
 ## AI provider layer
 

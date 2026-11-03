@@ -6,11 +6,11 @@ Nothing the AI suggests changes your text until you approve it. The original upl
 
 ## Quick start
 
-Requirements: Node.js 20+ and PostgreSQL 14+.
+Requirements: Node.js 20+. Nothing else to install: your books are stored in a database file inside the app folder (`prisma/studio.db`), and uploads and exports in `storage/`. Back up those two to back up everything.
 
 ```bash
 npm install
-cp .env.example .env            # then edit DATABASE_URL and add ANTHROPIC_API_KEY
+cp .env.example .env            # Windows: copy .env.example .env
 npx prisma migrate deploy       # create the database tables
 npm run build
 npm start                       # web app on http://localhost:3100 (change the port in package.json if 3100 is taken) + background editing worker
@@ -19,13 +19,6 @@ npm start                       # web app on http://localhost:3100 (change the p
 For development, use `npm run dev` instead of `build` + `start`.
 
 `npm start` / `npm run dev` start two processes: the Next.js web app and the **worker** (`src/worker/index.ts`), which runs editing jobs. If you deploy them separately, run `npm run worker` alongside the web server. Without a worker, editing jobs stay queued.
-
-### Creating the database (local Postgres)
-
-```bash
-createuser -P studio            # password: studio (or change DATABASE_URL)
-createdb -O studio editorial_studio
-```
 
 ### AI: use your Claude subscription (no API key)
 
@@ -57,9 +50,7 @@ The app currently has **no sign-in**; everything belongs to one owner account cr
 ## Tests
 
 ```bash
-createdb -O studio editorial_studio_test
-DATABASE_URL=postgresql://studio:studio@localhost:5432/editorial_studio_test npx prisma migrate deploy
-npm test                         # unit + database integration tests (uses the _test database)
+npm test                         # unit + database integration tests (builds a throwaway prisma/test.db)
 ```
 
 Browser end-to-end test (needs the app running, plus Playwright: `npm i -D playwright && npx playwright install chromium`):

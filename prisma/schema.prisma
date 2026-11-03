@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -63,11 +63,11 @@ model Project {
   isFiction       Boolean       @default(true)
   language        String        @default("en-US")
   manuscriptState String        @default("complete") // complete | partial | revision | republish
-  targetFormats   String[]      @default(["kindle", "paperback"])
+  targetFormats   Json          // string[]; SQLite has no list columns
   editingMode     EditingMode   @default(COPYEDIT)
   intensity       Intensity     @default(STANDARD)
   status          ProjectStatus @default(DRAFT)
-  styleSheet      Json          @default("{}")
+  styleSheet      Json          
   archived        Boolean       @default(false)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -94,7 +94,7 @@ model SourceFile {
   sizeBytes    Int
   sha256       String
   storageKey   String   @unique
-  importReport Json     @default("{}")
+  importReport Json     
   createdAt    DateTime @default(now())
 
   chapters Chapter[]
@@ -131,7 +131,7 @@ model Paragraph {
   style     String  @default("body")
   text      String
   // inline formatting: [{ start, end, type: "italic" | "bold" }]
-  marks     Json    @default("[]")
+  marks     Json    
 
   suggestions Suggestion[]
 
@@ -259,7 +259,7 @@ model ContinuityRecord {
   kind      String   // character | location | term | event | pov | style
   name      String
   details   String
-  chapters  String[] @default([])
+  chapters  Json     
   createdAt DateTime @default(now())
 
   @@index([projectId, kind])
@@ -296,8 +296,8 @@ model ExportRecord {
   storageKey String            @unique
   sizeBytes  Int
   isFinal    Boolean           @default(false)
-  config     Json              @default("{}")
-  validation Json              @default("{}")
+  config     Json              
+  validation Json              
   createdAt  DateTime          @default(now())
 }
 
@@ -308,7 +308,7 @@ model AuditEvent {
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   action    String
-  details   Json     @default("{}")
+  details   Json     
   createdAt DateTime @default(now())
 
   @@index([projectId, createdAt])

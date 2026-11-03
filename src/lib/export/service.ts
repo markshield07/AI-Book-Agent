@@ -110,6 +110,8 @@ export async function exportReport(userId: string, projectId: string) {
       storageKey: key,
       sizeBytes: buf.length,
       isFinal: false,
+      config: {},
+      validation: [],
     },
   });
 }

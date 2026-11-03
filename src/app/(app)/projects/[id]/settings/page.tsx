@@ -14,13 +14,14 @@ export default async function ProjectSettings({ params, searchParams }: { params
   const user = await requireUser();
   const p = await getOwnedProject(id, user.id).catch((e) => { if (e instanceof NotFoundError) notFound(); throw e; });
   const s = (p.styleSheet ?? {}) as StyleSheet;
+  const d = { ...p, targetFormats: (p.targetFormats as string[] | null) ?? [] };
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-8">
       <ProjectHeader project={p} tab="settings" />
       <ActionForm action={updateProjectAction} submit="Save settings" className="mt-6 space-y-8">
         <input type="hidden" name="projectId" value={p.id} />
-        <section className="card p-5"><h2 className="mb-4 text-lg font-semibold">Book details</h2><BookFields d={p} /></section>
-        <section className="card p-5"><h2 className="mb-4 text-lg font-semibold">Default editing level</h2><EditingFields d={p} /></section>
+        <section className="card p-5"><h2 className="mb-4 text-lg font-semibold">Book details</h2><BookFields d={d} /></section>
+        <section className="card p-5"><h2 className="mb-4 text-lg font-semibold">Default editing level</h2><EditingFields d={d} /></section>
         <section className="card p-5">
           <h2 className="mb-1 text-lg font-semibold">Style sheet</h2>
           <p className="mb-4 text-sm muted">The editor follows this in every chapter.</p>

@@ -1,12 +1,13 @@
 // Background worker: claims editing jobs from Postgres and runs them.
 // Run alongside the web server (`npm run dev` starts both). Safe to run several copies.
 import { claimJob, runJob } from "../lib/editor/pipeline";
-import { db } from "../lib/db";
+import { db, enableWal } from "../lib/db";
 
 let stopping = false;
 const POLL_MS = Number(process.env.WORKER_POLL_MS || 2000);
 
 async function loop() {
+  await enableWal().catch((e) => console.error("[worker] could not enable WAL", e));
   console.log("[worker] started; polling for editing jobs");
   while (!stopping) {
     try {
