@@ -45,12 +45,27 @@ Quick check that it works: `npx tsx tests/live-claude-code.ts` edits one test se
 
 ## Single-author mode (no login)
 
-The app currently has **no sign-in**; everything belongs to one owner account created automatically. Data is still stored per user, so accounts can be switched back on later. **Do not put it on a public URL as-is.** Anyone who can reach it can read your manuscripts. Run it locally, or behind a private network or host-level password (e.g. your hosting provider's access protection).
+The app currently has **no sign-in**; everything belongs to one owner account created automatically. Data is still stored per user, so accounts can be switched back on later. **Do not put it on a public URL as-is.** Anyone who can reach it can read your manuscripts. Run it locally, or behind a private network or host-level password (e.g. your hosting provider's access protection). To protect it, the app only listens on this computer (`127.0.0.1`), refuses requests addressed to any other host name (DNS-rebinding protection), and refuses changes coming from other websites (cross-site request protection). Open it at http://localhost:3100.
+
+## The Auditor (QA and security)
+
+A second agent, **The Auditor**, audits the app itself: a 30-year enterprise QA and security engineer whose job is to break it. See [docs/AUDITOR.md](docs/AUDITOR.md).
+
+- **On every push** GitHub Actions runs the automatic gate (`.github/workflows/audit.yml`): type-check, all tests, dependency vulnerability scan, production build, the live attack suite, the browser end-to-end test, and a secret scan. A red X on a commit means don't ship it. Free tier, no API keys.
+- **Full audit on request**: in Claude Code, type `/audit` (or "audit this update"). Claude follows the playbook, fixes what it finds with regression tests, and writes a report to `docs/audits/`.
+
+Run the same gate locally:
+
+```bash
+npm run audit:all                # typecheck + tests + dependency audit + build
+AI_PROVIDER=rules npm start &    # then, with the app running:
+npm run test:attack              # tries to break the running app (CSRF, DNS rebinding, zip bombs, races, ...)
+```
 
 ## Tests
 
 ```bash
-npm test                         # unit + database integration tests (builds a throwaway prisma/test.db)
+npm test                         # unit + database integration + adversarial tests (builds a throwaway prisma/test.db)
 ```
 
 Sample manuscripts for trying the app (a short novel with deliberate typos, dialect and continuity slips, as .docx, .txt and .md):

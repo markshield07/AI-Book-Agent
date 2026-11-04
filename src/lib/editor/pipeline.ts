@@ -2,7 +2,7 @@
 // Each chapter is a checkpoint (JobStep); a failed or interrupted job resumes from the
 // first unfinished chapter. Progress shown to authors is the real step count.
 import type { EditingMode, Intensity, Job, Prisma } from "@prisma/client";
-import { db } from "../db";
+import { db, writeTransaction } from "../db";
 import { getProvider, providerInfo } from "../ai";
 import { ProviderError, type ProjectContext, type StyleSheet, type ChunkParagraph } from "../ai/types";
 import { countWords, type Mark } from "../doc/model";
@@ -233,7 +233,7 @@ async function runAnalysis(job: JobWithProject, provider: ReturnType<typeof getP
     ...result.terms.map((t) => ({ projectId: job.projectId, kind: "term", name: t.name, details: t.description, chapters: [] })),
     ...result.events.map((e) => ({ projectId: job.projectId, kind: "event", name: e.name, details: e.description, chapters: e.chapters })),
   ];
-  await db.$transaction(async (tx) => {
+  await writeTransaction(async (tx) => {
     await tx.continuityRecord.deleteMany({ where: { projectId: job.projectId } });
     if (records.length) await tx.continuityRecord.createMany({ data: records });
     const derived = { voice: result.voice, pov: result.pov, tense: result.tense, conventions: result.conventions };

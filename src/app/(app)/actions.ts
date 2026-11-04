@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { EditingMode, Intensity, Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, writeTransaction } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getOwnedProject } from "@/lib/projects";
 import { enqueueEditJob, requestCancel, resumeJob } from "@/lib/editor/pipeline";
@@ -111,7 +111,7 @@ export async function duplicateProjectAction(form: FormData) {
     orderBy: { position: "asc" },
     include: { paragraphs: { orderBy: { position: "asc" } }, suggestions: true },
   });
-  const copy = await db.$transaction(async (tx) => {
+  const copy = await writeTransaction(async (tx) => {
     const p = await tx.project.create({
       data: {
         userId: user.id, title: `${src.title} (copy)`, authorName: src.authorName, genre: src.genre, isFiction: src.isFiction,
