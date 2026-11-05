@@ -6,3 +6,9 @@ storage/
 next-env.d.ts
 test-results
 storage-test/
+prisma/*.db
+prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm
+/samples/
+/.audit/
