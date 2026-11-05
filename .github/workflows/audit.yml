@@ -36,7 +36,16 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - name: Unit, integration and adversarial tests
+      - name: Install W3C EPUBCheck (official ebook validator, free; Java is on the runner)
+        run: |
+          mkdir -p tools/epubcheck
+          curl -sSfL -o /tmp/epubcheck.zip https://github.com/w3c/epubcheck/releases/download/v5.2.1/epubcheck-5.2.1.zip
+          unzip -q /tmp/epubcheck.zip -d tools/epubcheck
+          java -jar tools/epubcheck/epubcheck-5.2.1/epubcheck.jar --version
+
+      - name: Unit, integration and adversarial tests (EPUBs are checked with EPUBCheck)
+        env:
+          REQUIRE_EPUBCHECK: "1"
         run: npm test
 
       - name: Dependency vulnerabilities (fail on high or critical)

@@ -12,3 +12,4 @@ prisma/*.db-wal
 prisma/*.db-shm
 /samples/
 /.audit/
+/tools/epubcheck/

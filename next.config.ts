@@ -14,7 +14,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["mammoth", "@prisma/client", "bcryptjs"],
+  serverExternalPackages: ["mammoth", "@prisma/client", "bcryptjs", "pdfkit", "fontkit", "pdf-lib", "hyphen"],
   experimental: {
     serverActions: { bodySizeLimit: "30mb" },
     // The request guard (src/middleware.ts) sees every request. Without this, Next cuts request
