@@ -3,7 +3,7 @@
 // manuscript can never be corrupted by approval actions.
 import crypto from "node:crypto";
 import type { Prisma, Suggestion, SuggestionStatus } from "@prisma/client";
-import { db } from "../db";
+import { db, writeTransaction } from "../db";
 import { rangesOverlap } from "../doc/assemble";
 import { getOwnedSuggestion, getOwnedChapter, getOwnedProject } from "../projects";
 import { isApplied } from "./manuscript";
@@ -46,7 +46,7 @@ export async function decide(userId: string, suggestionId: string, action: Actio
     if (authorText.includes("\n")) throw new DecisionError("Replacement text can't contain line breaks.", "invalid");
   }
   const batchId = crypto.randomUUID();
-  return db.$transaction(
+  return writeTransaction(
     async (tx) => {
       await assertEditable(tx, owned.projectId);
       const s = await tx.suggestion.findUniqueOrThrow({ where: { id: suggestionId } });
@@ -79,7 +79,7 @@ export async function decideBulk(
 ) {
   const ch = await getOwnedChapter(chapterId, userId);
   const batchId = crypto.randomUUID();
-  return db.$transaction(
+  return writeTransaction(
     async (tx) => {
       await assertEditable(tx, ch.projectId);
       const pending = await tx.suggestion.findMany({
@@ -129,7 +129,7 @@ export async function decideBulk(
 /** Undo the author's most recent decision (or bulk batch) in this project. */
 export async function undoLast(userId: string, projectId: string) {
   await getOwnedProject(projectId, userId);
-  return db.$transaction(
+  return writeTransaction(
     async (tx) => {
       await assertEditable(tx, projectId);
       const last = await tx.decision.findFirst({

@@ -2,7 +2,7 @@
 // created after that version return to pending. The restore itself is a new version,
 // so nothing is lost and it can be undone like any other decision batch.
 import crypto from "node:crypto";
-import { db } from "../db";
+import { db, writeTransaction } from "../db";
 import { getOwnedProject } from "../projects";
 import { createVersion, type DecisionMap } from "./manuscript";
 import { audit } from "../audit";
@@ -13,7 +13,7 @@ export async function restoreVersion(userId: string, projectId: string, versionI
   if (!v) throw new Error("Version not found");
   const target = v.decisions as unknown as DecisionMap;
   const batchId = crypto.randomUUID();
-  await db.$transaction(
+  await writeTransaction(
     async (tx) => {
       const all = await tx.suggestion.findMany({ where: { projectId } });
       for (const s of all) {

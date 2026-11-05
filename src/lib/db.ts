@@ -13,3 +13,31 @@ export async function enableWal() {
   if (!url.startsWith("file:")) return;
   await db.$queryRawUnsafe("PRAGMA journal_mode=WAL;");
 }
+
+type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
+
+/**
+ * Interactive transaction for anything that writes. Use this instead of db.$transaction(async ...).
+ *
+ * Found by the auditor (2026-11-04): with SQLite, a few interactive transactions started at
+ * the same moment (a double-click, two tabs, bulk accept + undo) deadlock inside the database
+ * engine. Every one of them hangs for the full 30 seconds and then fails. So write
+ * transactions in this process run one at a time (each takes a few milliseconds), and each
+ * takes the write lock as its first step so it never has to upgrade a read lock while another
+ * process (the worker) is writing.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+
+export function writeTransaction<T>(fn: (tx: Tx) => Promise<T>, opts: { timeout?: number } = {}): Promise<T> {
+  const run = () =>
+    db.$transaction(
+      async (tx) => {
+        if (url.startsWith("file:")) await tx.$executeRawUnsafe(`UPDATE "User" SET "id" = "id" WHERE 0`);
+        return fn(tx);
+      },
+      { maxWait: 30_000, timeout: opts.timeout ?? 30_000 }
+    );
+  const result = queue.then(run, run);
+  queue = result.catch(() => undefined);
+  return result;
+}

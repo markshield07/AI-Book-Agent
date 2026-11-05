@@ -1,6 +1,6 @@
 // Stage 1 (ingestion): store the original file immutably, parse it, and add chapters.
 import type { Prisma } from "@prisma/client";
-import { db } from "../db";
+import { db, writeTransaction } from "../db";
 import { importManuscript, importPlainText, extensionOf } from "../doc/import";
 import { chapterWordCount, type DocChapter, type ImportResult } from "../doc/model";
 import { newStorageKey, putFile, sha256 } from "../storage";
@@ -86,7 +86,7 @@ export async function ingest(
     pending: [],
   };
 
-  const sf = await db.$transaction(async (tx) => {
+  const sf = await writeTransaction(async (tx) => {
     const sf = await tx.sourceFile.create({
       data: { projectId, originalName: name, mimeType: mime, sizeBytes: data.length, sha256: sha256(data), storageKey: key, importReport: {} },
     });
@@ -148,7 +148,7 @@ export async function reconcile(userId: string, projectId: string, sourceFileId:
   const report = sf.importReport as unknown as IngestReport;
   const item = report.pending.find((p) => p.key === key);
   if (!item) return;
-  await db.$transaction(async (tx) => {
+  await writeTransaction(async (tx) => {
     if (choice === "replace") {
       const old = await tx.chapter.findFirstOrThrow({ where: { id: item.existingChapterId, projectId } });
       // Old chapter (and its decisions) is kept for history but leaves the manuscript.

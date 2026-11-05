@@ -23,6 +23,33 @@ export class ImportError extends Error {
 export const SUPPORTED_EXTENSIONS = [".docx", ".txt", ".md", ".markdown"];
 export const PLANNED_EXTENSIONS = [".rtf", ".pdf", ".epub", ".doc", ".odt", ".pages"];
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+// A .docx is a zip. A tiny "zip bomb" can expand to many gigabytes and crash the app, so the
+// declared uncompressed size is checked before anything is unpacked. A real 300,000-word
+// manuscript expands to well under 100 MB.
+export const MAX_DOCX_UNCOMPRESSED_BYTES = 300 * 1024 * 1024;
+export const MAX_DOCX_ENTRIES = 5000;
+
+/** Refuse zip bombs by reading the zip directory (sizes are declared there; nothing is unpacked). */
+export async function checkDocxSize(data: Buffer): Promise<void> {
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(data);
+  } catch {
+    throw new ImportError("We couldn't read this Word document. It may be corrupt or password-protected.");
+  }
+  const entries = Object.values(zip.files);
+  if (entries.length > MAX_DOCX_ENTRIES) throw new ImportError("This Word document has an unusual structure and can't be imported safely.");
+  let total = 0;
+  for (const f of entries) {
+    if (f.dir) continue;
+    const declared = (f as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize;
+    if (typeof declared !== "number" || !Number.isFinite(declared) || declared < 0)
+      throw new ImportError("This Word document has an unusual structure and can't be imported safely.");
+    total += declared;
+  }
+  if (total > MAX_DOCX_UNCOMPRESSED_BYTES)
+    throw new ImportError("This Word document unpacks to more than 300 MB, which is far larger than any manuscript. It can't be imported safely.");
+}
 
 interface RawBlock {
   kind: "heading" | "body" | "blockquote" | "title";
@@ -70,6 +97,7 @@ export async function importDocx(data: Buffer): Promise<ImportResult> {
   if (data.length < 4 || data[0] !== 0x50 || data[1] !== 0x4b) {
     throw new ImportError("This file isn't a valid Word document. It may be corrupt or an older .doc file.");
   }
+  await checkDocxSize(data);
   let html: string;
   const messages: string[] = [];
   let images = 0;

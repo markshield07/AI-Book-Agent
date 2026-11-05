@@ -1,0 +1,94 @@
+# The Auditor's automatic gate. Runs on every push and pull request (GitHub Actions free tier,
+# no API keys). Any red step means the update must not ship. See docs/AUDITOR.md.
+name: Audit
+
+on:
+  push:              # every push to any branch; results also show on its pull request
+  workflow_dispatch:  # run by hand from the Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Types, tests, build, attack suite, end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AI_PROVIDER: rules          # offline editor: no AI calls, no keys, no cost
+      DATABASE_URL: file:./studio.db
+      STORAGE_DIR: ./storage
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (exact lockfile)
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit, integration and adversarial tests
+        run: npm test
+
+      - name: Dependency vulnerabilities (fail on high or critical)
+        run: npm run audit:deps
+
+      - name: Production build
+        run: |
+          cp .env.example .env
+          npx prisma migrate deploy
+          npm run build
+
+      - name: Start the app
+        run: |
+          nohup npm start > app.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3100/dashboard && exit 0; sleep 1; done
+          cat app.log; exit 1
+
+      - name: Live attack suite
+        run: npm run test:attack
+
+      - name: Install browser for end-to-end test
+        run: |
+          npm i --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+
+      - name: Browser end-to-end workflow
+        run: npm run test:e2e
+
+      - name: App log
+        if: always()
+        run: cat app.log || true
+
+      - name: Keep screenshots and exported files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-evidence
+          path: |
+            test-results/
+            app.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan the full git history for keys and tokens
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz | tar -xz gitleaks
+          ./gitleaks git --redact --verbose --exit-code 1 .
