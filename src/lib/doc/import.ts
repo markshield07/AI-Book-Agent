@@ -311,7 +311,7 @@ const CHAPTER_RE = new RegExp(
 );
 const ROMAN = "(?=[mdclxvi])m{0,3}(?:c[md]|d?c{0,3})(?:x[cl]|l?x{0,3})(?:i[xv]|v?i{0,3})";
 const SPECIAL_RE = new RegExp(`^(prologue|epilogue|interlude|(?:part|book)\\s+(?:[0-9]+|${ROMAN}|(?:${NUMBER_WORDS})(?:[- ](?:${NUMBER_WORDS}))?))\\b.{0,60}$`, "i");
-const PART_RE = new RegExp(`^(?:part|book)\\s+(?:[0-9]+|${ROMAN}|(?:${NUMBER_WORDS}))\\b`, "i");
+export const PART_RE = new RegExp(`^(?:part|book)\\s+(?:[0-9]+|${ROMAN}|(?:${NUMBER_WORDS}))\\b`, "i");
 const FRONT_RE = /^(foreword|preface|introduction|dedication|epigraph|copyright|author'?s note|note to the reader)\b.{0,40}$/i;
 const BACK_RE = /^(acknowledg(e)?ments|about the author|afterword|also by|other books by|glossary|appendix)\b.{0,40}$/i;
 const SCENE_BREAK_RE = /^\s*(?:[*#~•·◆◇❖§+=_\-]\s*){1,7}$/;

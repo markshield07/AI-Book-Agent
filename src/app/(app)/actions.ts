@@ -9,6 +9,7 @@ import { getOwnedProject } from "@/lib/projects";
 import { enqueueEditJob, requestCancel, resumeJob } from "@/lib/editor/pipeline";
 import { reconcile } from "@/lib/editor/ingest";
 import { approveManuscript, exportDocx, exportReport, reopenEditing, ApprovalBlocked } from "@/lib/export/service";
+import { exportPaperback, exportEpub, exportKindleDocx } from "@/lib/publish/service";
 import { restoreVersion } from "@/lib/editor/versions";
 import { audit } from "@/lib/audit";
 import { deleteFile } from "@/lib/storage";
@@ -215,6 +216,23 @@ export async function exportAction(_: ActionState, form: FormData): Promise<Acti
   }
   revalidatePath(`/projects/${projectId}`);
   return { message: "Your file is ready. Download it from the list below." };
+}
+
+export async function publishExportAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const projectId = String(form.get("projectId"));
+  const kind = String(form.get("kind"));
+  try {
+    const rec =
+      kind === "paperback" ? await exportPaperback(user.id, projectId) : kind === "epub" ? await exportEpub(user.id, projectId) : kind === "kindle_docx" ? await exportKindleDocx(user.id, projectId) : null;
+    if (!rec) return { error: "Unknown format." };
+    revalidatePath(`/projects/${projectId}/publish`);
+    return rec.isFinal
+      ? { message: `${rec.filename} is ready and passed every KDP readiness check we can run. Download it below.` }
+      : { message: `${rec.filename} was created, but some readiness checks failed. See the report below before uploading to KDP.` };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function restoreVersionAction(form: FormData) {

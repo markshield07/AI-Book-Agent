@@ -153,6 +153,35 @@ async function main() {
     check(dl.status === 200 && !/[\r\n"]evil/.test(cd) && !dl.headers.get("x-injected"), "download file name can't inject headers", cd);
   } else check(false, "source file saved");
 
+  console.log("\nPublishing (Phase 2)");
+  {
+    const put = (body: string, headers: Record<string, string> = {}) =>
+      req(`/api/projects/${P}/publishing`, { method: "PUT", headers: { "Content-Type": "application/json", ...headers }, body });
+    const xs = await put('{"details":{"copyright":"planted"}}', { Origin: "https://evil.example" });
+    check(xs.status === 403, "cross-site change to publishing settings refused", `got ${xs.status}`);
+    for (const [label, body] of [["broken JSON", "{bad"], ["array body", "[]"], ["unknown trim", '{"layout":{"trim":"99x99"}}'], ["object as copyright", '{"details":{"copyright":{"not":""}}}'],
+      ["oversized dedication", JSON.stringify({ details: { dedication: "x".repeat(100_000) } })], ["prototype key", '{"layout":{"__proto__":{"bleed":true}}}']] as const) {
+      const r = await put(body);
+      check(r.status === 400 || (label === "prototype key" && r.status === 200), `publishing: ${label} handled safely`, `got ${r.status}`);
+    }
+    const proj = await db.project.findUnique({ where: { id: P }, select: { publishing: true } });
+    check(!JSON.stringify(proj?.publishing ?? {}).includes("planted"), "no planted text stored in book details");
+    for (const path of ["/api/fonts/..%2F..%2Fpackage.json/regular", "/api/fonts/eb-garamond/..%2F..%2F..%2F.env", "/api/fonts/constructor/regular", "/api/fonts/eb-garamond/toString"]) {
+      const r = await req(path);
+      check(r.status === 404, `font route refuses ${path.slice(11, 50)}`, `got ${r.status}`);
+    }
+    const font = await req("/api/fonts/eb-garamond/regular");
+    check(font.status === 200 && font.headers.get("content-type") === "font/ttf", "bundled book font is served", `got ${font.status}`);
+    for (const id of ["does-not-exist", "..%2F..%2Fetc"]) {
+      for (const path of [`/api/projects/${id}/publish/preview`, `/api/projects/${id}/publish/ebook`, `/api/projects/${id}/publishing`]) {
+        const r = await req(path);
+        check(r.status === 404, `GET ${path.slice(0, 50)} → not found`, `got ${r.status}`);
+      }
+    }
+    const huge = await req(`/api/projects/${P}/publish/preview?from=-5&to=999999`);
+    check(huge.status === 200 && ((await huge.json()).pages?.length ?? 0) <= 40, "preview page range is clamped");
+  }
+
   console.log("\nRace conditions (rapid clicking)");
   const para = await db.paragraph.findFirst({ where: { chapter: { projectId: P } } });
   if (para) {

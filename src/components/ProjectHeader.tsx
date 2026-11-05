@@ -5,6 +5,7 @@ export function ProjectHeader({ project, tab }: { project: { id: string; title: 
   const tabs = [
     ["overview", "Overview", `/projects/${project.id}`],
     ["review", "Review changes", `/projects/${project.id}/review`],
+    ["publish", "Publish", `/projects/${project.id}/publish`],
     ["versions", "Version history", `/projects/${project.id}/versions`],
     ["settings", "Book settings", `/projects/${project.id}/settings`],
   ];
