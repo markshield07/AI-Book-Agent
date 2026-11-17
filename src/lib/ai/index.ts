@@ -1,6 +1,8 @@
 // Provider registry. AI_PROVIDER = claude-code | anthropic | rules.
 // Default: claude-code (your Claude subscription, via the Claude Code CLI) when it is
-// installed; otherwise anthropic if an API key is set; otherwise offline rules.
+// installed; otherwise offline rules. The paid API (anthropic) is only ever used when
+// AI_PROVIDER=anthropic is set on purpose: a stray ANTHROPIC_API_KEY in the environment
+// must never quietly start pay-as-you-go billing.
 import { AnthropicEditor } from "./anthropic";
 import { ClaudeCodeEditor, claudeCliAvailable } from "./claude-code";
 import { RulesEditor } from "./rules";
@@ -14,7 +16,7 @@ export function configuredProviderName(): ProviderName {
   if (p === "anthropic") return "anthropic";
   if (p === "claude-code" || p === "subscription") return "claude-code";
   if (claudeCliAvailable()) return "claude-code";
-  return process.env.ANTHROPIC_API_KEY ? "anthropic" : "rules";
+  return "rules";
 }
 
 export function getProvider(name: string = configuredProviderName()): EditorProvider {

@@ -50,4 +50,18 @@ describe("Claude provider", () => {
   it("falls back to automatic checks when no key is configured", () => {
     expect(configuredProviderName()).toBe("rules");
   });
+  it("never switches to the paid API just because an API key is in the environment", () => {
+    const saved = { p: process.env.AI_PROVIDER, k: process.env.ANTHROPIC_API_KEY, c: process.env.CLAUDE_CLI };
+    try {
+      delete process.env.AI_PROVIDER;
+      process.env.ANTHROPIC_API_KEY = "sk-ant-test-not-real";
+      process.env.CLAUDE_CLI = "definitely-not-installed-claude-cli";
+      expect(configuredProviderName()).not.toBe("anthropic");
+      process.env.AI_PROVIDER = "anthropic";
+      expect(configuredProviderName()).toBe("anthropic");
+    } finally {
+      for (const [k, v] of [["AI_PROVIDER", saved.p], ["ANTHROPIC_API_KEY", saved.k], ["CLAUDE_CLI", saved.c]] as const)
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
 });
