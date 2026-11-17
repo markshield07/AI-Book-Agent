@@ -14,6 +14,7 @@
     "test:e2e": "tsx tests/e2e/full-workflow.ts",
     "postinstall": "prisma generate",
     "test:attack": "tsx tests/security/attack-suite.ts",
+    "test:long": "tsx tests/e2e/long-book.ts",
     "audit:deps": "npm audit --audit-level=high",
     "audit:all": "npm run typecheck && npm test && npm run audit:deps && npm run build"
   },
