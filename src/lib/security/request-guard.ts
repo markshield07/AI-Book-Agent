@@ -1,10 +1,13 @@
 // Request guard for a local, no-login app. Runs in middleware on every request.
 //
-// Because there is no sign-in, anything that can make the browser send a request to
-// localhost:3100 could act as the author. Two attacks matter:
-//  - DNS rebinding: a web page on evil.example re-points its own hostname at 127.0.0.1 and
-//    then reads http://evil.example:3100/api/account/export (every manuscript) as same-origin.
-//    Blocked by only answering requests whose Host header is a local name (or ALLOWED_HOSTS).
+// The app listens on every network address (0.0.0.0:3100) so any device on the home network
+// can open it with no setup, e.g. http://192.168.1.20:3100. There is no sign-in, so anything
+// that can make a browser send a request to the app could act as the author. Two attacks matter:
+//  - DNS rebinding: a web page on evil.example re-points its own hostname at the app's address
+//    and then reads http://evil.example:3100/api/account/export (every manuscript) as
+//    same-origin. Blocked by only answering Host headers an outside website can't control:
+//    IP addresses, localhost, bare computer names ("desktop-ab12") and mDNS names (*.local).
+//    Any other name must be listed in ALLOWED_HOSTS (or ALLOWED_HOSTS="*" to allow all).
 //  - Cross-site requests (CSRF): any page the author visits can send a "simple" POST to
 //    localhost. Blocked by refusing state-changing requests that a browser marks as coming
 //    from another site (Origin / Sec-Fetch-Site).
@@ -12,6 +15,20 @@
 // that can run commands here can already read the database file.
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+const IPV6 = /^\[[0-9a-f:.]+\]$/
+const LABEL = "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?";
+const COMPUTER_NAME = new RegExp(`^${LABEL}$`); // no dot: not a public domain
+const MDNS_NAME = new RegExp(`^(${LABEL}\\.)+local$`); // home-network names like studio-pc.local
+
+/**
+ * True for Host names that only resolve on this computer or the home network, so no outside
+ * website can point them at the app: IP literals, localhost, bare computer names, *.local.
+ */
+export function isNetworkLocalHost(hostname: string): boolean {
+  return LOCAL_HOSTS.has(hostname) || IPV4.test(hostname) || IPV6.test(hostname) ||
+    (COMPUTER_NAME.test(hostname) && !/^\d+$/.test(hostname)) || MDNS_NAME.test(hostname);
+}
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export type GuardResult = { ok: true } | { ok: false; status: number; reason: string };
@@ -29,7 +46,11 @@ export function hostnameOf(hostHeader: string): string {
 
 export function allowedHosts(env: string | undefined = process.env.ALLOWED_HOSTS): Set<string> {
   const extra = (env ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-  return new Set([...LOCAL_HOSTS, ...extra]);
+  return new Set(extra);
+}
+
+function hostAllowed(hostname: string, allowed: Set<string>): boolean {
+  return allowed.has("*") || allowed.has(hostname) || isNetworkLocalHost(hostname);
 }
 
 export function checkRequest(
@@ -38,8 +59,12 @@ export function checkRequest(
   allowed: Set<string> = allowedHosts()
 ): GuardResult {
   const host = headers.get("host");
-  if (!host || !allowed.has(hostnameOf(host)))
-    return { ok: false, status: 421, reason: "This app only answers on localhost. Add the host to ALLOWED_HOSTS to allow it." };
+  if (!host || !hostAllowed(hostnameOf(host), allowed))
+    return {
+      ok: false,
+      status: 421,
+      reason: "Open the app by this computer's IP address (for example http://192.168.1.20:3100). To use a different name, add it to ALLOWED_HOSTS.",
+    };
 
   if (SAFE_METHODS.has(method.toUpperCase())) return { ok: true };
 

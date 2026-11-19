@@ -13,7 +13,7 @@ npm install
 cp .env.example .env            # Windows: copy .env.example .env
 npx prisma migrate deploy       # create the database tables
 npm run build
-npm start                       # web app on http://localhost:3100 (change the port in package.json if 3100 is taken) + background editing worker
+npm start                       # web app on port 3100 for this computer and every device on your home network (it prints the addresses) + background editing worker
 ```
 
 For development, use `npm run dev` instead of `build` + `start`.
@@ -63,7 +63,7 @@ Fonts: EB Garamond, Crimson Pro, Source Serif 4, Lora and Source Sans 3 are bund
 
 ## Single-author mode (no login)
 
-The app currently has **no sign-in**; everything belongs to one owner account created automatically. Data is still stored per user, so accounts can be switched back on later. **Do not put it on a public URL as-is.** Anyone who can reach it can read your manuscripts. Run it locally, or behind a private network or host-level password (e.g. your hosting provider's access protection). To protect it, the app only listens on this computer (`127.0.0.1`), refuses requests addressed to any other host name (DNS-rebinding protection), and refuses changes coming from other websites (cross-site request protection). Open it at http://localhost:3100.
+The app currently has **no sign-in**; everything belongs to one owner account created automatically. Data is still stored per user, so accounts can be switched back on later. **Do not put it on a public URL as-is.** Anyone who can reach it can read your manuscripts. Run it locally, or behind a private network or host-level password (e.g. your hosting provider's access protection). The app listens on your home network so any phone, tablet or computer on the same Wi-Fi can use it: open the "Other devices" address that `npm start` prints, such as http://192.168.1.20:3100 (on this computer, http://localhost:3100 also works). The first time, Windows may ask whether to allow Node.js through the firewall: choose **Private networks** only. Anyone on your Wi-Fi can open the app, so keep guests on a guest network if that matters. Never forward the port on your router. Outside websites still can't reach it: the app refuses host names an outside site could control (DNS-rebinding protection) and refuses changes coming from other websites (cross-site request protection).
 
 ## The Auditor (QA and security)
 

@@ -1,7 +1,7 @@
 // The Auditor's adversarial unit tests: each one is an attack that must keep failing.
 import { describe, it, expect } from "vitest";
 import JSZip from "jszip";
-import { checkRequest, hostnameOf, allowedHosts } from "@/lib/security/request-guard";
+import { checkRequest, hostnameOf, allowedHosts, isNetworkLocalHost } from "@/lib/security/request-guard";
 import { readJson, BadRequestError } from "@/lib/api";
 import { importManuscript, ImportError } from "@/lib/doc/import";
 import { z } from "zod";
@@ -16,18 +16,27 @@ describe("request guard: DNS rebinding", () => {
     expect(hostnameOf("127.0.0.1")).toBe("127.0.0.1");
     expect(hostnameOf("Evil.Example:3100")).toBe("evil.example");
   });
-  it("answers local hosts", () => {
-    for (const host of ["localhost:3100", "127.0.0.1:3100", "[::1]:3100", "LOCALHOST:3100"])
+  it("answers local hosts and any device on the home network, with no setup", () => {
+    for (const host of ["localhost:3100", "127.0.0.1:3100", "[::1]:3100", "LOCALHOST:3100", "192.168.1.20:3100",
+      "10.0.0.5:3100", "172.16.4.2", "[fe80::1c2b:3a]:3100", "desktop-ab12:3100", "Studio-PC.local:3100", "marks-laptop.home.local"])
       expect(checkRequest("GET", h({ host }), local).ok).toBe(true);
   });
-  it("refuses any other Host, even for reads", () => {
-    for (const host of ["evil.example:3100", "localhost.evil.example", "127.0.0.1.nip.io:3100", "192.168.1.20:3100", ""]) {
+  it("refuses domain names an outside website could point at the app, even for reads", () => {
+    for (const host of ["evil.example:3100", "localhost.evil.example", "127.0.0.1.nip.io:3100", "192.168.1.20.nip.io",
+      "evil.local.example.com", "999.1.1.1:3100", "1.2.3:3100", "12345", "-bad-:3100", ""]) {
       const r = checkRequest("GET", h(host ? { host } : {}), local);
       expect(r.ok).toBe(false);
     }
   });
-  it("allows hosts the owner adds to ALLOWED_HOSTS", () => {
+  it("allows hosts the owner adds to ALLOWED_HOSTS, or every host with *", () => {
     expect(checkRequest("GET", h({ host: "studio.lan:3100" }), allowedHosts("studio.lan")).ok).toBe(true);
+    expect(checkRequest("GET", h({ host: "studio.lan:3100" }), local).ok).toBe(false);
+    expect(checkRequest("GET", h({ host: "anything.example:3100" }), allowedHosts("*")).ok).toBe(true);
+  });
+  it("classifies network-local names", () => {
+    expect(isNetworkLocalHost("192.168.0.1")).toBe(true);
+    expect(isNetworkLocalHost("studio.local")).toBe(true);
+    expect(isNetworkLocalHost("studio.example")).toBe(false);
   });
 });
 
@@ -38,6 +47,11 @@ describe("request guard: cross-site requests (CSRF)", () => {
   });
   it("allows non-browser clients on this computer (no Origin)", () => {
     expect(checkRequest("POST", h(base), local).ok).toBe(true);
+  });
+  it("allows same-origin POSTs from another device on the home network", () => {
+    const lan = { host: "192.168.1.20:3100", origin: "http://192.168.1.20:3100", "sec-fetch-site": "same-origin" };
+    expect(checkRequest("POST", h(lan), local).ok).toBe(true);
+    expect(checkRequest("POST", h({ ...lan, origin: "http://192.168.1.99:3100", "sec-fetch-site": "same-site" }), local).ok).toBe(false);
   });
   it("refuses POSTs from another site", () => {
     expect(checkRequest("POST", h({ ...base, origin: "https://evil.example" }), local).ok).toBe(false);
