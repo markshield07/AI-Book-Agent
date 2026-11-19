@@ -41,4 +41,10 @@ body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 .chg ins { color: var(--color-ins); background: var(--color-ins-bg); text-decoration: none; }
 .chg.selected { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .chg.accepted ins { background: transparent; color: inherit; border-bottom: 1px dotted var(--color-ins); }
+.note-selected { outline: 2px solid var(--color-note); outline-offset: 2px; }
+.jump-flash { animation: jump-flash 2.2s ease-out; }
+@keyframes jump-flash {
+  0%, 25% { background-color: var(--color-accent-soft); box-shadow: 0 0 0 8px var(--color-accent-soft); }
+  100% { background-color: transparent; box-shadow: 0 0 0 8px transparent; }
+}
 .note-mark { background: var(--color-note-bg); border-bottom: 2px solid var(--color-note); }
