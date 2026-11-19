@@ -34,8 +34,8 @@ Work through every section. For each item: test it, record pass / fail / not tes
 - Start the app (`AI_PROVIDER=rules npm start`), then `npm run test:attack` and `npm run test:e2e`.
 
 ### 2. Security
-- **Exposure**: app listens on 127.0.0.1 only; no route reachable from another machine. No login exists, so anything reachable is fully readable and writable.
-- **DNS rebinding**: requests with a foreign `Host` header are refused (421) on every route, pages and APIs.
+- **Exposure**: by the owner's choice (2026-11-19), the app listens on all addresses (`0.0.0.0:3100`) so any device on the home network can open it with no setup. No login exists, so anyone on that network can read and change everything. Verify it is never exposed beyond the home network (no port forwarding, tunnels or public hosting instructions), and that the Windows firewall prompt guidance says "Private networks".
+- **DNS rebinding**: requests whose `Host` is a domain name an outside website could control are refused (421) on every route, pages and APIs. Allowed without setup: IP addresses, `localhost`, bare computer names, `*.local`. Anything else only via `ALLOWED_HOSTS`. A request with `Host: 192.168.x.x` must still be answered.
 - **Cross-site requests**: state-changing requests with a foreign `Origin`, `Origin: null`, or `Sec-Fetch-Site: cross-site|same-site` are refused (403), including server actions and multipart uploads.
 - **Clickjacking and headers**: `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy: no-referrer`, no `X-Powered-By`.
 - **Injection**: every API body is schema-validated (zod); objects never reach Prisma where a string is expected; no raw SQL built from input; manuscript text is always rendered escaped (no `dangerouslySetInnerHTML` on author or AI text).
@@ -82,4 +82,4 @@ Write `docs/audits/YYYY-MM-DD-<topic>.md` with: scope (commits / files), verdict
 - Every API route validates its body with `readJson(req, schema)` (src/lib/api.ts).
 - Every write transaction uses `writeTransaction` (src/lib/db.ts).
 - Every new bug fix ships with a regression test.
-- `npm start` / `npm run dev` must keep `-H 127.0.0.1`. To use the app from another device, put it behind real authentication first; `ALLOWED_HOSTS` only relaxes the Host check.
+- `npm start` / `npm run dev` listen on `-H 0.0.0.0 -p 3100` (home-network access is intentional). Keep src/middleware.ts in place: the Host check (DNS rebinding) and cross-site checks are what stop outside websites from reading or changing manuscripts. Before any exposure beyond the home network, add real authentication.

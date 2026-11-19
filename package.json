@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "prisma migrate deploy && concurrently -n web,worker \"next dev -H 127.0.0.1 -p 3100\" \"tsx src/worker/index.ts\"",
+    "dev": "prisma migrate deploy && node scripts/show-urls.mjs 3100 && concurrently -n web,worker \"next dev -H 0.0.0.0 -p 3100\" \"tsx src/worker/index.ts\"",
     "build": "prisma generate && next build",
-    "start": "prisma migrate deploy && concurrently -n web,worker \"next start -H 127.0.0.1 -p 3100\" \"tsx src/worker/index.ts\"",
+    "start": "prisma migrate deploy && node scripts/show-urls.mjs 3100 && concurrently -n web,worker \"next start -H 0.0.0.0 -p 3100\" \"tsx src/worker/index.ts\"",
     "worker": "tsx src/worker/index.ts",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",

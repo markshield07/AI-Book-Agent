@@ -57,6 +57,17 @@ async function main() {
       s.on("error", reject);
     });
     check(/^HTTP\/1\.1 4(21|03)/.test(raw), "raw DNS-rebinding request for all manuscripts refused", raw.split("\r\n")[0]);
+    // Home-network devices open the app by IP address; that must keep working with no setup.
+    const lan: string = await new Promise((resolve, reject) => {
+      const s = net.connect(Number(u.port || 80), u.hostname, () =>
+        s.write(`GET /dashboard HTTP/1.1\r\nHost: 192.168.1.20:${u.port}\r\nConnection: close\r\n\r\n`)
+      );
+      let out = "";
+      s.on("data", (d) => (out += d));
+      s.on("end", () => resolve(out));
+      s.on("error", reject);
+    });
+    check(/^HTTP\/1\.1 200/.test(lan), "home-network device (Host: 192.168.1.20) is answered", lan.split("\r\n")[0]);
   }
 
   console.log("\nCross-site requests (CSRF)");

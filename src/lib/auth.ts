@@ -4,7 +4,7 @@
 // multi-author accounts can be added back later without changing the data model.
 //
 // Do not expose single-author mode on a public URL: anyone who can reach it can open the
-// manuscripts. Keep it on localhost or behind a private network / host-level auth.
+// manuscripts. Keep it on the home network (never port-forwarded) or behind host-level auth.
 import "server-only";
 import { db } from "./db";
 
