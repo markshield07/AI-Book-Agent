@@ -43,6 +43,8 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
   const [bulkAsk, setBulkAsk] = useState<"accept" | "reject" | "notes" | null>(null);
   const [find, setFind] = useState("");
   const centerRef = useRef<HTMLDivElement>(null);
+  // Bumped on every selection so the manuscript scrolls even when the same change is picked twice.
+  const [jump, setJump] = useState<{ id: string; n: number } | null>(null);
   const locked = data.project.status === "APPROVED";
 
   const ch = data.chapter;
@@ -130,8 +132,31 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
   function select(id: string) {
     setSelected(id);
     setModifying(null);
-    requestAnimationFrame(() => document.getElementById(`s-${id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    // If "Find in chapter" would hide the passage, clear it so there is something to jump to.
+    const s = suggestions.find((x) => x.id === id);
+    const para = s?.paragraphId ? ch?.paragraphs.find((p) => p.id === s.paragraphId) : null;
+    if (find && para && !para.text.toLowerCase().includes(find.toLowerCase())) setFind("");
+    setJump((j) => ({ id, n: (j?.n ?? 0) + 1 }));
   }
+
+  // After the screen has re-rendered, scroll the manuscript to the chosen passage and flash it.
+  // Falls back to the whole paragraph when the change isn't drawn inline (notes, the
+  // Original/Accepted views, or overlapping suggestions).
+  useEffect(() => {
+    if (!jump) return;
+    const s = suggestions.find((x) => x.id === jump.id);
+    const inline = document.getElementById(`s-${jump.id}`);
+    const para = s?.paragraphId ? document.getElementById(`p-${s.paragraphId}`) : null;
+    const target = inline ?? para;
+    if (target) {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      const flashEl = para ?? target;
+      flashEl.classList.remove("jump-flash");
+      void flashEl.offsetWidth; // restart the animation
+      flashEl.classList.add("jump-flash");
+    }
+    document.getElementById(`li-${jump.id}`)?.scrollIntoView({ block: "nearest" });
+  }, [jump]);
 
   // Keyboard shortcuts: J/K next/previous, A approve, R reject, M modify, U undo.
   useEffect(() => {
@@ -228,11 +253,11 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
                 const notes = suggestions.filter((s) => s.kind === "note" && s.paragraphId === p.id);
                 if (find && !p.text.toLowerCase().includes(find.toLowerCase())) return null;
                 return (
-                  <div key={p.id} className="relative">
+                  <div key={p.id} id={`p-${p.id}`} className="relative rounded-sm">
                     {notes.length > 0 && (
                       <button className="absolute -left-6 top-1 text-xs" title={`${notes.length} editorial note${notes.length > 1 ? "s" : ""}`} onClick={() => select(notes[0].id)} aria-label="Show editorial note">💬</button>
                     )}
-                    <p className={`${cls} whitespace-pre-line ${notes.some((n) => n.status === "PENDING") ? "note-mark" : ""}`}>
+                    <p className={`${cls} whitespace-pre-line ${notes.some((n) => n.status === "PENDING") ? "note-mark" : ""} ${notes.some((n) => n.id === selected) ? "note-selected" : ""}`}>
                       <ParagraphView text={p.text} marks={p.marks} edits={edits} view={view} visibleIds={new Set(visible.map((v) => v.id))} selected={selected} onSelect={select} />
                     </p>
                   </div>
@@ -282,6 +307,7 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
                   {sel.status !== "PENDING" && <button className="btn-ghost" disabled={busy} onClick={() => decide(sel, "reset")}>Back to pending</button>}
                 </div>
               ))}
+              {sel.paragraphId && <button className="btn-ghost mt-4 py-1" onClick={() => select(sel.id)}>Show in text</button>}
               <p className="mt-6 text-xs muted">Shortcuts: J/K next/previous · A approve · R reject · M modify · U undo</p>
             </div>
           ) : (
@@ -291,12 +317,39 @@ export function ReviewWorkspace({ projectId, initial }: { projectId: string; ini
               {visible.length > 0 && <button className="btn-primary mt-4" onClick={() => select((visible.find((s) => s.status === "PENDING") ?? visible[0]).id)}>Start with the first change</button>}
             </div>
           )}
+          {ch && visible.some((s) => s.kind === "edit") && (
+            <div className="border-t border-[var(--color-line)] p-5 text-sm">
+              <h3 className="font-medium">Suggested changes in this chapter</h3>
+              <p className="mt-0.5 text-xs muted">Click one to jump to it in the text.</p>
+              <ul className="mt-2 space-y-1">
+                {visible.filter((s) => s.kind === "edit").map((s) => {
+                  const to = s.status === "MODIFIED" ? s.authorText ?? "" : s.suggestedText;
+                  const mark = s.status === "PENDING" ? "•" : s.status === "REJECTED" ? "✕" : "✓";
+                  return (
+                    <li key={s.id} id={`li-${s.id}`}>
+                      <button className={`flex w-full gap-2 rounded p-2 text-left ${selected === s.id ? "bg-[var(--color-accent-soft)]" : "hover:bg-stone-50"}`} onClick={() => select(s.id)}>
+                        <span className={`w-3 shrink-0 text-xs ${s.status === "PENDING" ? "muted" : s.status === "REJECTED" ? "text-red-700" : "text-emerald-700"}`} aria-label={s.status.toLowerCase()}>{mark}</span>
+                        <span className="min-w-0">
+                          <span className="text-xs muted">{CATEGORY_LABEL(s.category)}</span>
+                          <span className="mt-0.5 line-clamp-2 block font-serif">
+                            {s.originalText ? <del className="text-[var(--color-del)]">{s.originalText}</del> : null}
+                            {s.originalText && to ? <span className="font-sans muted"> → </span> : null}
+                            {to ? <span className="text-[var(--color-ins)]">{to}</span> : null}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
           {ch && suggestions.some((s) => s.kind === "note") && (
             <div className="border-t border-[var(--color-line)] p-5 text-sm">
               <h3 className="font-medium">Editorial notes in this chapter</h3>
               <ul className="mt-2 space-y-2">
                 {suggestions.filter((s) => s.kind === "note").map((n) => (
-                  <li key={n.id}>
+                  <li key={n.id} id={`li-${n.id}`}>
                     <button className={`w-full rounded p-2 text-left ${selected === n.id ? "bg-[var(--color-note-bg)]" : "hover:bg-stone-50"}`} onClick={() => select(n.id)}>
                       <span className="text-xs muted">{CATEGORY_LABEL(n.category)} · {n.status === "PENDING" ? "open" : n.status === "ACCEPTED" ? "resolved" : "dismissed"}</span>
                       <span className="mt-0.5 line-clamp-2 block">{n.explanation}</span>
